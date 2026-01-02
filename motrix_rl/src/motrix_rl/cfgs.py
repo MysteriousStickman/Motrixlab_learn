@@ -193,7 +193,27 @@ class locomotion:
 
         seed: int = 42
         share_policy_value_features: bool = False
-        max_env_steps: int = 1024 * 60000
+        max_env_steps: int = 1024 * 60_000
+        num_envs: int = 2048
+
+        # Override PPO configuration
+        rollouts: int = 24
+        policy_hidden_layer_sizes: tuple[int, ...] = (256, 128, 64)
+        value_hidden_layer_sizes: tuple[int, ...] = (256, 128, 64)
+        learning_epochs: int = 5
+        mini_batches: int = 3
+        learning_rate: float = 3e-4
+
+    @rlcfg("go2-flat-terrain-walk")
+    @dataclass
+    class Go2WalkPPO(PPOCfg):
+        """
+        Go2 Walk RL config
+        """
+
+        seed: int = 42
+        share_policy_value_features: bool = False
+        max_env_steps: int = 1024 * 60_000
         num_envs: int = 2048
 
         # Override PPO configuration
