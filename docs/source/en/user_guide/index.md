@@ -26,7 +26,15 @@ tutorial/training_and_result
 :maxdepth: 1
 
 demo/cartpole
+demo/bounce_ball
 demo/dm_walker
+demo/dm_cheetah
+demo/dm_hopper
+demo/dm_reacher
 demo/locomotion_unitree_go1
+demo/locomotion_unitree_go1_rough_terrain
+demo/anymal_c
+demo/franka_lift_cube
+demo/franka_open_cabinet
 
 ```

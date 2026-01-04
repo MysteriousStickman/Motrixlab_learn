@@ -4,8 +4,6 @@
 # Extracts the first frame from all videos in source/_static/videos/
 # and saves them as poster images in source/_static/images/poster/
 
-set -e
-
 # Define directories
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_DIR="$SCRIPT_DIR/source/_static/videos"
@@ -22,6 +20,17 @@ if ! command -v ffmpeg &> /dev/null; then
     exit 1
 fi
 
+# Check if timeout command is available
+if ! command -v timeout &> /dev/null; then
+    echo "Warning: 'timeout' command not found. Script may hang on problematic videos."
+    echo "On Ubuntu/Debian: sudo apt-get install coreutils"
+    echo "On macOS: brew install coreutils"
+    FFMPEG_TIMEOUT=""
+else
+    # Timeout for ffmpeg command (in seconds)
+    FFMPEG_TIMEOUT="timeout 30"
+fi
+
 # Check if source directory exists
 if [ ! -d "$SOURCE_DIR" ]; then
     echo "Error: Source directory '$SOURCE_DIR' does not exist."
@@ -35,6 +44,7 @@ echo "Created target directory: $TARGET_DIR"
 # Counter for processed files
 processed=0
 skipped=0
+failed=0
 
 # Process all video files
 echo "Processing videos in: $SOURCE_DIR"
@@ -53,36 +63,79 @@ for video_file in "$SOURCE_DIR"/*; do
     if [[ " ${VIDEO_EXTENSIONS[*]} " =~ " ${extension,,} " ]]; then
         output_file="$TARGET_DIR/${filename_noext}.jpg"
 
-        # Check if output file already exists
+        # Check if output file already exists and is valid
         if [ -f "$output_file" ]; then
-            echo "�  Skipping '$filename' (poster already exists)"
-            ((skipped++))
-            continue
+            # Verify the existing poster is valid (not empty and is an image)
+            if [ -s "$output_file" ]; then
+                echo "✓  Skipping '$filename' (poster already exists)"
+                ((skipped++))
+                continue
+            else
+                echo "⚠  Removing invalid poster for '$filename'"
+                rm -f "$output_file"
+            fi
         fi
 
-        echo "<� Processing '$filename'..."
+        echo "⏳ Processing '$filename'..."
 
-        # Extract first frame using ffmpeg
-        if ffmpeg -i "$video_file" -vframes 1 -q:v 2 "$output_file" -y -loglevel error; then
-            echo " Created poster: ${filename_noext}.jpg"
-            ((processed++))
+        # Extract first frame using ffmpeg with timeout
+        if [ -n "$FFMPEG_TIMEOUT" ]; then
+            # Use timeout if available
+            if timeout 30 ffmpeg -i "$video_file" -vframes 1 -q:v 2 "$output_file" -y -loglevel error 2>&1; then
+                ffmpeg_success=true
+            else
+                ffmpeg_success=false
+            fi
         else
-            echo "L Failed to process '$filename'"
+            # No timeout available, run ffmpeg directly
+            if ffmpeg -i "$video_file" -vframes 1 -q:v 2 "$output_file" -y -loglevel error 2>&1; then
+                ffmpeg_success=true
+            else
+                ffmpeg_success=false
+            fi
+        fi
+
+        if $ffmpeg_success; then
+            # Verify the output file was created and is valid
+            if [ -f "$output_file" ] && [ -s "$output_file" ]; then
+                echo "✓ Created poster: ${filename_noext}.jpg"
+                ((processed++))
+            else
+                echo "✗ Failed to create valid poster for '$filename'"
+                rm -f "$output_file"  # Remove any partial output
+                ((failed++))
+            fi
+        else
+            # ffmpeg failed
+            exit_code=$?
+            if [ $exit_code -eq 124 ]; then
+                echo "✗ Timeout processing '$filename' (after 30s)"
+            else
+                echo "✗ Failed to process '$filename' (exit code: $exit_code)"
+            fi
             rm -f "$output_file"  # Remove any partial output
+            ((failed++))
         fi
     else
-        echo "�  Skipping '$filename' (not a supported video format)"
+        echo "⊘  Skipping '$filename' (not a supported video format)"
         ((skipped++))
     fi
 done
 
 echo "------------------------------------------------"
 echo "Poster generation completed!"
-echo "=� Summary:"
-echo "   Processed: $processed videos"
-echo "   Skipped: $skipped files"
+echo "📊 Summary:"
+echo "   ✓ Processed: $processed videos"
+echo "   → Skipped: $skipped files"
+if [ $failed -gt 0 ]; then
+    echo "   ✗ Failed: $failed videos"
+fi
 echo "   Posters saved to: $TARGET_DIR"
 
 if [ $processed -eq 0 ]; then
-    echo "�  No new posters were created."
+    if [ $failed -eq 0 ]; then
+        echo "ℹ  No new posters were created."
+    else
+        echo "⚠  Some posters failed to generate. Please check the error messages above."
+    fi
 fi

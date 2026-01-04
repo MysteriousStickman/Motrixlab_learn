@@ -1,4 +1,4 @@
-# 2D Walker Robot Training Example
+# 2D Walker Robot
 
 The 2D Walker Robot (Walker2D) is a classic robot control task from DeepMind Control Suite. The goal is to achieve standing, walking, and running by controlling the robot's joints.
 
@@ -46,33 +46,17 @@ uv run scripts/train.py --env dm-runner
 ### 1. Environment Preview
 
 ```bash
-# View standing task
 uv run scripts/view.py --env dm-stander
-
-# View walking task
 uv run scripts/view.py --env dm-walker
-
-# View running task
 uv run scripts/view.py --env dm-runner
 ```
 
 ### 2. Start Training
 
 ```bash
-# Train standing task
 uv run scripts/train.py --env dm-stander
-
-# Train walking task (default)
 uv run scripts/train.py --env dm-walker
-
-# Train running task
 uv run scripts/train.py --env dm-runner
-
-# Customize number of environments
-uv run scripts/train.py --env dm-walker --num-envs 512
-
-# Enable rendering (visualize during training)
-uv run scripts/train.py --env dm-walker --render
 ```
 
 ### 3. View Training Progress
@@ -84,39 +68,9 @@ uv run tensorboard --logdir runs/dm-walker
 ### 4. Test Training Results
 
 ```bash
-# Automatically find best policy for testing (recommended)
+uv run scripts/play.py --env dm-stander
 uv run scripts/play.py --env dm-walker
-
-# Manually specify policy file for testing
-uv run scripts/play.py --env dm-walker --policy runs/dm-walker/nn/best_policy.pickle
-```
-
-> **Tip**: The system will automatically find the latest and best policy files in the `runs/dm-walker/` directory for testing. Supports dm-stander, dm-walker, dm-runner three task modes.
-
-## Configuration Parameters
-
-### Environment Configuration
-
-```python
-@dataclass
-class WalkerEnvCfg(EnvCfg):
-    model_file: str = "walker.xml"           # MJCF model file
-    max_episode_seconds: float = 25.0        # Maximum episode length
-    sim_dt: float = 0.0125                   # Simulation time step
-    ctrl_dt: float = 0.025                   # Control time step
-    move_speed: float = 1.0                  # Target movement speed
-    stand_height: float = 1.2                # Target standing height
-```
-
-### Training Configuration
-
-```python
-@dataclass
-class WalkerRLCfg(BaseRLCfg):
-    num_envs: int = 512                      # Number of parallel environments
-    learning_rate: float = 3e-4              # Learning rate
-    batch_size: int = 512                    # Batch size
-    max_epochs: int = 1000                   # Maximum training epochs
+uv run scripts/play.py --env dm-runner
 ```
 
 ## Reward Function Design

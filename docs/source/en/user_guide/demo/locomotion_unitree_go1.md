@@ -1,4 +1,4 @@
-# Unitree GO1 Robot Walking Training Example
+# Unitree GO1 Locomotion
 
 Unitree GO1 is a quadruped robot platform. This example demonstrates how to train GO1 to achieve stable gait walking on flat terrain.
 
@@ -21,82 +21,32 @@ The GO1 quadruped robot has 12 degrees of freedom (3 joints per leg) and needs t
 -   **Reward Function**: Composite reward including speed tracking, posture stability, energy efficiency, and other components
 -   **Termination Conditions**: Robot trunk contacts ground or other unstable states
 
-### Training Task
+---
+
+## Usage Guide
+
+### 1. Environment Preview
+
+```bash
+uv run scripts/view.py --env go1-flat-terrain-walk
+```
+
+### 2. Start Training
 
 ```bash
 uv run scripts/train.py --env go1-flat-terrain-walk
 ```
 
-## Configuration Parameters
+### 3. View Training Progress
 
-### Environment Configuration
-
-```python
-@dataclass
-class Go1WalkNpEnvCfg(EnvCfg):
-    max_episode_seconds: float = 20.0      # Maximum episode length
-    model_file: str = "scene_motor_actuator.xml"
-    sim_dt: float = 0.01                   # Simulation time step
-    ctrl_dt: float = 0.01                  # Control time step
+```bash
+uv run tensorboard --logdir runs/go1-flat-terrain-walk
 ```
 
-### Training Configuration
+### 4. Test Training Results
 
-```python
-from dataclasses import dataclass
-from motrix_rl.skrl.cfg import PPOCfg
-from motrix_rl import registry
-
-@registry.rlcfg("go1-flat-terrain-walk")
-@dataclass
-class Go1WalkPPO(PPOCfg):
-    """
-    GO1 quadruped robot walking training configuration
-    """
-
-    seed = 42
-    max_env_steps: int = 40960000          # Maximum training steps
-    num_envs: int = 2048                   # Number of parallel environments
-
-    # Large network structure (suitable for complex robot control tasks)
-    policy_hidden_layer_sizes: tuple[int, ...] = (512, 256, 128)
-    value_hidden_layer_sizes: tuple[int, ...] = (512, 256, 128)
-
-    # PPO parameters (optimized for robot tasks)
-    learning_epochs: int = 2               # Training rounds
-    mini_batches: int = 32                 # Number of mini-batches
-    learning_rate: float = 1e-3            # Learning rate
-```
-
-**Note**: GO1 is a complex task that uses large network structures. If you need to create specialized configurations for different training backends (JAX/Torch), refer to the environment configuration documentation examples.
-
-### Control Configuration
-
-```python
-@dataclass
-class ControlConfig:
-    stiffness = 80                         # PD controller stiffness [N*m/rad]
-    damping = 1                            # PD controller damping [N*m*s/rad]
-    action_scale = 0.1                     # Action scaling factor
-```
-
-### Initial Joint Angles
-
-```python
-default_joint_angles = {
-    "FL_hip": 0.0,      # Front left hip joint
-    "RL_hip": 0.0,      # Rear left hip joint
-    "FR_hip": -0.0,     # Front right hip joint
-    "RR_hip": -0.0,     # Rear right hip joint
-    "FL_thigh": 0.9,    # Front left thigh
-    "RL_thigh": 0.9,    # Rear left thigh
-    "FR_thigh": 0.9,    # Front right thigh
-    "RR_thigh": 0.9,    # Rear right thigh
-    "FL_calf": -1.8,    # Front left calf
-    "RL_calf": -1.8,    # Rear left calf
-    "FR_calf": -1.8,    # Front right calf
-    "RR_calf": -1.8,    # Rear right calf
-}
+```bash
+uv run scripts/play.py --env go1-flat-terrain-walk
 ```
 
 ## Reward Function Design

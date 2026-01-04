@@ -13,4 +13,4 @@
 # limitations under the License.
 # ==============================================================================
 
-from . import cartpole, walker  # noqa: F401 import to register envs
+from . import bounce_ball, cartpole, cheetah, hopper, reacher, walker  # noqa: F401 import to register envs

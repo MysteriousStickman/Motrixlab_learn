@@ -28,3 +28,4 @@ class CartPoleEnvCfg(EnvCfg):
     model_file: str = model_file
     reset_noise_scale: float = 0.01
     max_episode_seconds: float = 10
+    render_spacing: float = 2.0

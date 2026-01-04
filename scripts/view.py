@@ -37,9 +37,13 @@ class NpEnvRunner:
         action_space = self._env.action_space
         if isinstance(action_space, gym.spaces.Box):
             size = (self._env.num_envs, *action_space.shape)
+            low = action_space.low
+            high = action_space.high
+            low = np.where(np.isneginf(low), -1e6, low)
+            high = np.where(np.isposinf(high), 1e6, high)
             return np.random.uniform(
-                low=action_space.low,
-                high=action_space.high,
+                low=low,
+                high=high,
                 size=size,
             ).astype(action_space.dtype)
         else:

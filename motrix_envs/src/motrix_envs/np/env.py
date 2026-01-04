@@ -53,12 +53,14 @@ class NpEnv(ABEnv):
     _model: mtx.SceneModel
     _cfg: EnvCfg
     _state: NpEnvState = None
+    _render_spacing: float
 
     def __init__(self, cfg: EnvCfg, num_envs: int = 1):
         self._cfg = cfg
         self._num_envs = num_envs
         self._model = mtx.load_model(cfg.model_file)
         self._model.options.timestep = cfg.sim_dt
+        self._render_spacing = cfg.render_spacing
 
     @property
     def model(self) -> mtx.SceneModel:
@@ -80,6 +82,13 @@ class NpEnv(ABEnv):
         Get the environment configuration
         """
         return self._cfg
+
+    @property
+    def render_spacing(self) -> bool:
+        """
+        Get the render spacing, with which the multi-envs will be rendered seperately in grid
+        """
+        return self._render_spacing
 
     @property
     def num_envs(self) -> int:

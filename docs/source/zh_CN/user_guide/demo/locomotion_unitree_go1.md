@@ -1,4 +1,4 @@
-# Unitree GO1 机器人行走训练示例
+# Unitree GO1 平地行走
 
 Unitree GO1 是一个四足机器人平台，本示例展示了如何训练 GO1 在平坦地形上实现稳定的步态行走。
 
@@ -14,68 +14,55 @@ Unitree GO1 是一个四足机器人平台，本示例展示了如何训练 GO1 
 
 ## 任务描述
 
-GO1 四足机器人具有 12 个自由度（每条腿 3 个关节），需要通过深度强化学习学习协调的步态控制：
+GO1 四足机器人具有 12 个自由度（每条腿 3 个关节），需要通过深度强化学习学习协调的步态控制。该环境使用 MotrixSim 物理引擎进行仿真，提供高保真的动力学模拟。智能体通过控制各关节的目标位置（通过 PD 控制器转换为力矩）来实现速度跟踪和姿态稳定。
 
--   **状态空间**：48 维，包含机器人线速度、角速度、姿态、关节角度、关节速度、动作和命令等
--   **动作空间**：12 维，控制各个关节的目标位置（通过 PD 控制器转换为力矩）
--   **奖励函数**：复合奖励，包含速度跟踪、姿态稳定、能量效率等多个组件
--   **终止条件**：机器人躯干接触地面或其他不稳定状态
+---
 
-### 训练任务
+## 动作空间（Action Space）
 
-```bash
-uv run scripts/train.py --env go1-flat-terrain-walk
-```
+| 项目     | 详细信息                         |
+| -------- | -------------------------------- |
+| **类型** | `Box(-1.0, 1.0, (12,), float32)` |
+| **维度** | 12                               |
 
-## 配置参数
+动作对应 12 个关节的位置控制指令（相对于默认站立姿态的偏移量），包括：
 
-### 环境配置
+| 序号 | 动作含义（关节位置变化）   | 对应肢体 |
+| ---: | -------------------------- | :------: |
+|  0-2 | 髋关节、大腿关节、小腿关节 |  前左腿  |
+|  3-5 | 髋关节、大腿关节、小腿关节 |  后左腿  |
+|  6-8 | 髋关节、大腿关节、小腿关节 |  前右腿  |
+| 9-11 | 髋关节、大腿关节、小腿关节 |  后右腿  |
 
-```python
-@dataclass
-class Go1WalkNpEnvCfg(EnvCfg):
-    max_episode_seconds: float = 20.0      # 最大episode长度
-    model_file: str = "scene_motor_actuator.xml"
-    sim_dt: float = 0.01                   # 仿真时间步
-    ctrl_dt: float = 0.01                  # 控制时间步
-```
+---
 
-### 控制配置
+## 观察空间
 
-```python
-@dataclass
-class ControlConfig:
-    stiffness = 80                         # PD 控制器刚度 [N*m/rad]
-    damping = 1                            # PD 控制器阻尼 [N*m*s/rad]
-    action_scale = 0.05                    # 动作缩放因子
-```
+| 项目     | 详细信息                         |
+| -------- | -------------------------------- |
+| **类型** | `Box(-inf, inf, (48,), float32)` |
+| **维度** | 48                               |
 
-### 初始关节角度
+GO1 环境的观测空间由以下部分组成（按顺序）：
 
-```python
-default_joint_angles = {
-    "FL_hip": 0.0,      # 前左髋关节
-    "RL_hip": 0.0,      # 后左髋关节
-    "FR_hip": -0.0,     # 前右髋关节
-    "RR_hip": -0.0,     # 后右髋关节
-    "FL_thigh": 0.9,    # 前左大腿
-    "RL_thigh": 0.9,    # 后左大腿
-    "FR_thigh": 0.9,    # 前右大腿
-    "RR_thigh": 0.9,    # 后右大腿
-    "FL_calf": -1.8,    # 前左小腿
-    "RL_calf": -1.8,    # 后左小腿
-    "FR_calf": -1.8,    # 前右小腿
-    "RR_calf": -1.8,    # 后右小腿
-}
-```
+| 部分                  | 内容说明         | 维度 | 备注               |
+| --------------------- | ---------------- | ---- | ------------------ |
+| **noisy_linvel**      | 局部坐标系线速度 | 3    | 带噪声的线速度     |
+| **noisy_gyro**        | 陀螺仪数据       | 3    | 带噪声的角速度     |
+| **local_gravity**     | 局部重力方向     | 3    | 重力向量投影       |
+| **noisy_joint_angle** | 关节角度         | 12   | 相对于默认值的偏差 |
+| **noisy_joint_vel**   | 关节速度         | 12   | 带噪声的关节速度   |
+| **last_actions**      | 上一帧动作       | 12   | 历史动作信息       |
+| **command**           | 速度命令         | 3    | [vx, vy, vyaw]     |
+
+---
 
 ## 奖励函数设计
 
 GO1 的奖励函数是一个复杂的复合函数，包含多个组件：
 
-### 主要奖励组件
-
 ```python
+# 主要奖励组件
 reward_config.scales = {
     "tracking_lin_vel": 1.0,      # 线速度跟踪奖励
     "tracking_ang_vel": 0.5,      # 角速度跟踪奖励
@@ -89,51 +76,57 @@ reward_config.scales = {
     "hip_pos": -1,                # 髋关节位置惩罚
     "calf_pos": -0.3,             # 腿关节位置惩罚
 }
+
+# 总奖励 = 加权组合以上所有项
 ```
 
-### 关键奖励函数
+---
 
-#### 速度跟踪奖励
+## 初始状态
 
-```python
-# 跟踪线速度命令（xy平面）
-def _reward_tracking_lin_vel(self, data, commands):
+-   **机器人位置**：固定在初始位置
+-   **关节角度**：设置为默认站立姿态
+-   **关节角度噪声**：每个关节在 [-0.125, 0.125] 弧度范围内添加随机噪声
+-   **速度初始化**：所有线速度和角速度初始化为零
 
-# 跟踪角速度命令（偏航）
-def _reward_tracking_ang_vel(self, data, commands):
+## Episode 终止条件
+
+-   **身体接触地面**：机器人躯干与地面发生非预期接触
+-   **速度异常**：线速度平方和超过阈值（1e8）
+
+---
+
+## 使用指南
+
+### 1. 环境预览
+
+```bash
+uv run scripts/view.py --env go1-flat-terrain-walk
 ```
 
-#### 足部空中时间奖励
+### 2. 开始训练
 
-```python
-def _reward_feet_air_time(self, commands, info):
+```bash
+uv run scripts/train.py --env go1-flat-terrain-walk
 ```
 
-## 观察空间构成
+### 3. 查看训练进度
 
-GO1 的观察空间为 48 维，包含以下信息：
-
-```python
-obs = np.hstack([
-    noisy_linvel,        # 3维：局部坐标系线速度
-    noisy_gyro,          # 3维：陀螺仪数据
-    local_gravity,       # 3维：局部重力方向
-    noisy_joint_angle,   # 12维：关节角度（相对于默认值）
-    noisy_joint_vel,     # 12维：关节速度
-    last_actions,        # 12维：上一帧动作
-    command,             # 3维：速度命令 [vx, vy, vyaw]
-])
+```bash
+uv run tensorboard --logdir runs/go1-flat-terrain-walk
 ```
 
-## 运动速度命令生成
+### 4. 测试训练结果
 
-训练过程中随机生成速度命令，确保智能体能够跟踪不同的移动速度：
-
-```python
-def resample_commands(self, num_envs: int):
+```bash
+uv run scripts/play.py --env go1-flat-terrain-walk
 ```
+
+---
 
 ## 预期训练结果
 
-1. 稳定的四足步态
-2. 良好的速度跟踪
+1. 稳定的四足步态（trot 步态或其他协调步态）
+2. 良好的速度跟踪能力
+3. 能够跟踪不同的速度命令（前进、转向）
+4. 姿态稳定，无明显侧翻

@@ -29,7 +29,7 @@ class NpRenderer:
     def __init__(self, env: NpEnv):
         num_envs = env.num_envs
         num_envs = 1 if num_envs is None else num_envs
-        spacing = 1.0
+        spacing = env.render_spacing
         cols = int(np.ceil(np.sqrt(num_envs)))
         offsets = []
         for i in range(num_envs):
@@ -43,7 +43,7 @@ class NpRenderer:
         self._env = env
         self._render = RenderApp()
         settings = RenderSettings.performance()
-        settings.enable_shadow = False  # disable shadow for better performance
+        settings.enable_shadow = True  # disable shadow for better performance
         self._render.launch(
             env.model,
             batch=num_envs,

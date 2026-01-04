@@ -35,8 +35,134 @@ MotrixLab 是一个为机器人训练设计的机器学习通用架构。它基�
 
 :::{grid-item-card}
 
+```{video} _static/videos/go1_rough_terrain_walk.mp4
+:poster: _static/images/poster/go1_rough_terrain_walk.jpg
+:nocontrols:
+:autoplay:
+:playsinline:
+:muted:
+:loop:
+:width: 100%
+```
+
+:::
+
+:::{grid-item-card}
+
+```{video} _static/videos/go1_stairs_terrain_walk.mp4
+:poster: _static/images/poster/go1_stairs_terrain_walk.jpg
+:nocontrols:
+:autoplay:
+:playsinline:
+:muted:
+:loop:
+:width: 100%
+```
+
+:::
+
+:::{grid-item-card}
+
+```{video} _static/videos/franka_lift_cube.mp4
+:poster: _static/images/poster/franka_lift_cube.jpg
+:nocontrols:
+:autoplay:
+:playsinline:
+:muted:
+:loop:
+:width: 100%
+```
+
+:::
+
+:::{grid-item-card}
+
+```{video} _static/videos/franka_open_cabinet.mp4
+:poster: _static/images/poster/franka_open_cabinet.jpg
+:nocontrols:
+:autoplay:
+:playsinline:
+:muted:
+:loop:
+:width: 100%
+```
+
+:::
+
+:::{grid-item-card}
+
+```{video} _static/videos/anymal_c.mp4
+:poster: _static/images/poster/anymal_c.jpg
+:nocontrols:
+:autoplay:
+:playsinline:
+:muted:
+:loop:
+:width: 100%
+```
+
+:::
+
+:::{grid-item-card}
+
 ```{video} _static/videos/dm_walker.mp4
 :poster: _static/images/poster/dm_walker.jpg
+:nocontrols:
+:autoplay:
+:playsinline:
+:muted:
+:loop:
+:width: 100%
+```
+
+:::
+
+:::{grid-item-card}
+
+```{video} _static/videos/dm_cheetah.mp4
+:poster: _static/images/poster/dm_cheetah.jpg
+:nocontrols:
+:autoplay:
+:playsinline:
+:muted:
+:loop:
+:width: 100%
+```
+
+:::
+
+:::{grid-item-card}
+
+```{video} _static/videos/dm_hopper.mp4
+:poster: _static/images/poster/dm_hopper.jpg
+:nocontrols:
+:autoplay:
+:playsinline:
+:muted:
+:loop:
+:width: 100%
+```
+
+:::
+
+:::{grid-item-card}
+
+```{video} _static/videos/dm_reacher.mp4
+:poster: _static/images/poster/dm_reacher.jpg
+:nocontrols:
+:autoplay:
+:playsinline:
+:muted:
+:loop:
+:width: 100%
+```
+
+:::
+
+:::{grid-item-card}
+
+```{video} _static/videos/bounce_ball.mp4
+:poster: _static/images/poster/bounce_ball.jpg
 :nocontrols:
 :autoplay:
 :playsinline:
