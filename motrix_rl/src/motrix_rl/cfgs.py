@@ -33,15 +33,76 @@ class basic:
         learning_epochs: int = 5
         mini_batches: int = 4
 
+    @rlcfg("acrobot", backend="jax")
+    @dataclass
+    class AcrobotPPO(PPOCfg):
+        max_env_steps: int = 60_000_000
+        check_point_interval: int = 500
+
+        # Override PPO configuration
+        policy_hidden_layer_sizes: tuple[int, ...] = (32, 32)
+        value_hidden_layer_sizes: tuple[int, ...] = (32, 32)
+        rollouts: int = 64
+        learning_epochs: int = 5
+        mini_batches: int = 8
+        learning_rate: float = 3e-4
+        grad_norm_clip: float = 0.5
+        clip_predicted_values: bool = False
+        value_clip: float = 10.0
+        entropy_loss_scale: float = 0.05
+        learning_rate_scheduler_kl_threshold: float = 0.02
+        discount_factor: float = 0.995
+        lambda_param: float = 0.97
+        ratio_clip: float = 0.2
+        value_loss_scale: float = 0.5
+        random_timesteps: int = 0
+        learning_starts: int = 0
+        kl_threshold: float = 0.03
+        grad_norm_clip: float = 0.1
+        entropy_loss_scale: float = 0.1
+
+    @rlcfg("acrobot", backend="torch")
+    @dataclass
+    class AcrobotPPOTorch(PPOCfg):
+        max_env_steps: int = 60_000_000
+        check_point_interval: int = 500
+
+        # Override PPO configuration
+        policy_hidden_layer_sizes: tuple[int, ...] = (32, 32)
+        value_hidden_layer_sizes: tuple[int, ...] = (32, 32)
+        rollouts: int = 64
+        learning_epochs: int = 5
+        mini_batches: int = 8
+        learning_rate: float = 0.0003
+        learning_rate_scheduler_kl_threshold: float = 0.02
+        entropy_loss_scale: float = 0.2
+        discount_factor: float = 0.995
+        lambda_param: float = 0.97
+
+    @rlcfg("pendulum")
+    @dataclass
+    class PendulumPPO(PPOCfg):
+        seed: int = 42
+        max_env_steps: int = 5_000_000
+        num_envs: int = 1024
+
+        # Override PPO configuration
+        policy_hidden_layer_sizes: tuple[int, ...] = (64, 64)
+        value_hidden_layer_sizes: tuple[int, ...] = (64, 64)
+        learning_rate: float = 3e-4
+        rollouts: int = 32
+        learning_epochs: int = 5
+        mini_batches: int = 4
+
     @rlcfg("bounce_ball")
     @dataclass
     class BounceBallPPO(PPOCfg):
-        max_env_steps: int = 50_000_000
+        max_env_steps: int = 100_000_000
         check_point_interval: int = 5000
 
         # Override PPO configuration for bounce ball task
-        policy_hidden_layer_sizes: tuple[int, ...] = (512, 512, 512)
-        value_hidden_layer_sizes: tuple[int, ...] = (512, 512, 512)
+        policy_hidden_layer_sizes: tuple[int, ...] = (64, 64, 64)
+        value_hidden_layer_sizes: tuple[int, ...] = (64, 64, 64)
         rollouts: int = 128
         learning_epochs: int = 15
         mini_batches: int = 16
@@ -121,6 +182,20 @@ class basic:
         value_hidden_layer_sizes: tuple[int, ...] = (256, 128, 64)
 
     @rlcfg("dm-hopper-stand", backend="jax")
+    @dataclass
+    class HopperStandPPO(PPOCfg):
+        seed: int = 42
+        max_env_steps: int = 1024 * 40000
+        num_envs: int = 2048
+
+        # Override PPO configuration
+        learning_rate: float = 2e-4
+        rollouts: int = 24
+        learning_epochs: int = 4
+        mini_batches: int = 4
+        policy_hidden_layer_sizes: tuple[int, ...] = (32, 32, 32)
+        value_hidden_layer_sizes: tuple[int, ...] = (32, 32, 32)
+
     @rlcfg("dm-hopper-hop", backend="jax")
     @dataclass
     class HopperPPO(PPOCfg):
@@ -179,8 +254,121 @@ class basic:
         rollouts: int = 24
         learning_epochs: int = 4
         mini_batches: int = 32
+        policy_hidden_layer_sizes: tuple[int, ...] = (64, 64, 64)
+        value_hidden_layer_sizes: tuple[int, ...] = (64, 64, 64)
+
+    @rlcfg("dm-finger-spin")
+    @rlcfg("dm-finger-turn-easy")
+    @rlcfg("dm-finger-turn-hard")
+    @dataclass
+    class FingerPPO(PPOCfg):
+        seed: int = 42
+        max_env_steps: int = 1024 * 40000
+        num_envs: int = 2048
+
+        # Similar to other dm_* configs
+        learning_rate: float = 2e-4
+        rollouts: int = 24
+        learning_epochs: int = 4
+        mini_batches: int = 4
+
+    # JAX-only overrides (keep torch + turn-easy unaffected)
+    @rlcfg("dm-finger-spin", backend="jax")
+    @dataclass
+    class FingerSpinPPOJax(PPOCfg):
+        seed: int = 42
+        max_env_steps: int = 1024 * 40000
+        num_envs: int = 2048
+
+        # More conservative PPO for stability (spin can collapse mid-training in JAX)
+        learning_rate: float = 7.5e-5
+        learning_rate_scheduler_kl_threshold: float = 0.003
+        entropy_loss_scale: float = 5e-4
+        rollouts: int = 24
+        learning_epochs: int = 1
+        mini_batches: int = 16
+        ratio_clip: float = 0.08
+        value_clip: float = 0.1
+        value_loss_scale: float = 0.5
+        grad_norm_clip: float = 0.25
+
+    @rlcfg("dm-finger-turn-hard", backend="jax")
+    @dataclass
+    class FingerTurnHardPPOJax(PPOCfg):
+        seed: int = 42
+        max_env_steps: int = 1024 * 40000
+        num_envs: int = 2048
+
+        # Extra conservative to avoid late-stage collapses
+        learning_rate: float = 5e-5
+        learning_rate_scheduler_kl_threshold: float = 0.004
+        rollouts: int = 24
+        learning_epochs: int = 1
+        mini_batches: int = 16
+        ratio_clip: float = 0.08
+        value_loss_scale: float = 0.5
+        grad_norm_clip: float = 0.25
+
+    @rlcfg("dm-manipulator-bring-ball", backend="jax")
+    @dataclass
+    class ManipulatorPPOJax(PPOCfg):
+        seed: int = 42
+        max_env_steps: int = 1024 * 20000
+        num_envs: int = 256
+        learning_rate: float = 3e-4
+        rollouts: int = 24
+        learning_epochs: int = 4
+        mini_batches: int = 4
+        ratio_clip: float = 0.2
+        entropy_loss_scale: float = 1e-3
+        grad_norm_clip: float = 1.0
         policy_hidden_layer_sizes: tuple[int, ...] = (256, 128, 64)
         value_hidden_layer_sizes: tuple[int, ...] = (256, 128, 64)
+
+    @rlcfg("dm-manipulator-bring-ball", backend="torch")
+    @dataclass
+    class ManipulatorPPOTorch(PPOCfg):
+        seed: int = 42
+        max_env_steps: int = 1024 * 20000
+        num_envs: int = 256
+        learning_rate: float = 2e-4
+        rollouts: int = 24
+        learning_epochs: int = 4
+        mini_batches: int = 4
+        policy_hidden_layer_sizes: tuple[int, ...] = (256, 256)
+        value_hidden_layer_sizes: tuple[int, ...] = (256, 256)
+
+    @rlcfg("dm-humanoid-stand", backend="jax")
+    @rlcfg("dm-humanoid-walk", backend="jax")
+    @rlcfg("dm-humanoid-run", backend="jax")
+    @dataclass
+    class HumanoidPPO(PPOCfg):
+        seed: int = 42
+        max_env_steps: int = 1024 * 40000
+        num_envs: int = 2048
+
+        learning_rate: float = 3e-4
+        rollouts: int = 24
+        learning_epochs: int = 8
+        mini_batches: int = 2
+        policy_hidden_layer_sizes: tuple[int, ...] = (512, 256, 128)
+        value_hidden_layer_sizes: tuple[int, ...] = (512, 256, 128)
+
+    @rlcfg("dm-humanoid-stand", backend="torch")
+    @rlcfg("dm-humanoid-walk", backend="torch")
+    @rlcfg("dm-humanoid-run", backend="torch")
+    @dataclass
+    class HumanoidPPOTorch(PPOCfg):
+        seed: int = 42
+        max_env_steps: int = 1024 * 40000
+        num_envs: int = 2048
+
+        learning_rate: float = 3e-4
+        rollouts: int = 24
+        learning_epochs: int = 8
+        mini_batches: int = 2
+        policy_hidden_layer_sizes: tuple[int, ...] = (512, 256, 128)
+        value_hidden_layer_sizes: tuple[int, ...] = (512, 256, 128)
 
 
 class locomotion:
@@ -236,12 +424,26 @@ class locomotion:
 
 
 class manipulation:
-    @rlcfg("franka-lift-cube")
+    @rlcfg("franka-lift-cube", "jax")
     @dataclass
-    class FrankaLiftPPO(PPOCfg):
+    class FrankaLiftPPOJax(PPOCfg):
         seed: int = 42
         max_env_steps: int = 4096 * 50000
-        check_point_interval: int = 500
+        share_policy_value_features: bool = True
+
+        # Override PPO configuration
+        policy_hidden_layer_sizes: tuple[int, ...] = (256, 128, 64)
+        value_hidden_layer_sizes: tuple[int, ...] = (256, 128, 64)
+        rollouts: int = 24
+        learning_epochs: int = 4
+        mini_batches: int = 32
+        learning_rate: float = 1e-3
+
+    @rlcfg("franka-lift-cube", "torch")
+    @dataclass
+    class FrankaLiftPPOTorch(PPOCfg):
+        seed: int = 42
+        max_env_steps: int = 4096 * 50000
         share_policy_value_features: bool = True
 
         # Override PPO configuration
@@ -260,7 +462,6 @@ class manipulation:
     class FrankaOpenCabinetPPO(PPOCfg):
         seed: int = 64
         max_env_steps: int = 2048 * 24000
-        check_point_interval: int = 500
         share_policy_value_features: bool = False
 
         # Override PPO configuration
@@ -273,6 +474,55 @@ class manipulation:
         rewards_shaper_scale: float = 1e-1
         entropy_loss_scale: float = 0.001
 
+    @rlcfg("shadow-hand-repose")
+    @dataclass
+    class ShadowHandReposePPO(PPOCfg):
+        """
+        Shadow Hand Repose PPO configuration
+        """
+
+        # ===== Basic Settings =====
+        seed: int = 42
+        num_envs: int = 8192
+        play_num_envs: int = 16
+        max_env_steps: int = 200_000_000
+        check_point_interval: int = 1000
+
+        # ===== Network Architecture =====
+        policy_hidden_layer_sizes: tuple[int, ...] = (512, 512, 256, 128)
+        value_hidden_layer_sizes: tuple[int, ...] = (512, 512, 256, 128)
+        share_policy_value_features: bool = True
+
+        # ===== PPO Core Parameters =====
+        rollouts: int = 16
+        learning_epochs: int = 5
+        mini_batches: int = 4
+        discount_factor: 0.99
+        lambda_param: 0.95
+
+        # ===== Learning Rate =====
+        learning_rate: float = 5.0e-04
+        learning_rate_scheduler_kl_threshold: float = 0.016
+
+        # ===== Clipping =====
+        ratio_clip: float = 0.2
+        value_clip: float = 0.2
+        clip_predicted_values: bool = True
+        grad_norm_clip: float = 1.0
+
+        # ===== Loss Coefficients =====
+        entropy_loss_scale: float = 0.0
+        value_loss_scale: float = 2.0
+        kl_threshold: float = 0.0
+
+        # ===== Reward Shaping =====
+        rewards_shaper_scale: float = 0.01
+
+        # ===== Training Control =====
+        random_timesteps: int = 0
+        learning_starts: int = 0
+        time_limit_bootstrap: bool = False
+
 
 class navigation:
     @rlcfg("anymal_c_navigation_flat")
@@ -283,7 +533,6 @@ class navigation:
         num_envs: int = 2048  # Number of parallel environments during training
         play_num_envs: int = 16  # Number of parallel environments during evaluation
         max_env_steps: int = 100_000_000  # Maximum training steps
-        check_point_interval: int = 1000  # Checkpoint save interval (save every 100 iterations)
 
         # ===== PPO Algorithm Core Parameters =====
         learning_rate: float = 3e-4  # Learning rate

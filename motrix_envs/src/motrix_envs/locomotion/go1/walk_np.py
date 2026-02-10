@@ -19,7 +19,7 @@ import numpy as np
 
 from motrix_envs import registry
 from motrix_envs.locomotion.go1.cfg import Go1WalkNpEnvCfg
-from motrix_envs.math.quaternion import Quaternion
+from motrix_envs.math import quaternion
 from motrix_envs.np.env import NpEnv, NpEnvState
 
 
@@ -190,7 +190,7 @@ class Go1WalkTask(NpEnv):
         gyro = self.get_gyro(data)
         pose = self._body.get_pose(data)
         base_quat = pose[:, 3:7]
-        local_gravity = Quaternion.rotate_inverse(base_quat, self.gravity_vec)
+        local_gravity = quaternion.rotate_inverse(base_quat, self.gravity_vec)
         diff = self.get_dof_pos(data) - self.default_angles
         noisy_linvel = linear_vel * self.cfg.normalization.lin_vel
         noisy_gyro = gyro * self.cfg.normalization.ang_vel
@@ -320,7 +320,7 @@ class Go1WalkTask(NpEnv):
         # Penalize non flat base orientation
         pose = self._body.get_pose(data)
         base_quat = pose[:, 3:7]
-        gravity = Quaternion.rotate_inverse(base_quat, self.gravity_vec)
+        gravity = quaternion.rotate_inverse(base_quat, self.gravity_vec)
         return np.sum(np.square(gravity[:, :2]), axis=1)
 
     def _reward_torques(self, data: mtx.SceneData):

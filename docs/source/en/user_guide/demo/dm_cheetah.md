@@ -127,5 +127,6 @@ uv run scripts/play.py --env dm-cheetah
 
 ## Expected Training Results
 
-1. Stable horizontal speed approaching or exceeding 30.0 m/s
-2. Maintaining an upright torso and coordinated gait
+1. Run at a stable horizontal speed close to or exceeding 10.0 m/s
+2. Maintain torso stability and coordinated gait, running long distances without falling
+3. Running posture close to that of a real cheetah, with a sense of extension during the run

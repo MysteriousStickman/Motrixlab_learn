@@ -169,14 +169,12 @@ class NpEnv(ABEnv):
     def reset(
         self,
         data: mtx.SceneData,
-        done: np.ndarray = None,
     ) -> tuple[np.ndarray, dict]:
         """
         Reset the environment for the done envs
 
         Args:
             data (mtx.SceneData): The scene data to reset
-            done (Optional[np.ndarray]): A boolean array indicating which envs to reset. If None, reset all envs.
 
         Returns:
             tuple[np.ndarray, dict]: The initial observations and info after reset

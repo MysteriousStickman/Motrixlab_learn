@@ -19,39 +19,8 @@ import numpy as np
 
 from motrix_envs import registry
 from motrix_envs.locomotion.go2.cfg import Go2WalkNpEnvCfg
+from motrix_envs.math import quaternion
 from motrix_envs.np.env import NpEnv, NpEnvState
-
-
-## provide quat math utility from motrixsim.
-def quat_rotate_inverse(quats, v):
-    """
-    Rotate a fixed vector v by a list of quaternions using a vectorized approach.
-
-    Parameters:
-        quats (np.ndarray): Array of quaternions of shape (N, 4). Each quaternion is in [w, x, y, z] format.
-        v (np.ndarray): Fixed vector of shape (3,) to be rotated.
-
-    Returns:
-        np.ndarray: Array of rotated vectors of shape (N, 3).
-    """
-    # Normalize the quaternions to ensure they are unit quaternions
-
-    # Extract the scalar (w) and vector (x, y, z) parts of the quaternions
-    w = quats[:, -1]  # Shape (N,)
-    im = quats[:, :3]  # Shape (N, 3)
-
-    # Compute the cross product between the imaginary part of each quaternion and the fixed vector v.
-    # np.cross broadcasts v to match each row in im, resulting in an array of shape (N, 3)
-    cross_im_v = np.cross(im, v)
-
-    # Compute the intermediate terms for the rotation formula:
-    term1 = w[:, np.newaxis] * cross_im_v  # w * cross(im, v)
-    term2 = np.cross(im, cross_im_v)  # cross(im, cross(im, v))
-
-    # Apply the rotation formula: v_rot = v + 2 * (term1 + term2)
-    v_rotated = v + 2 * (term1 + term2)
-
-    return v_rotated
 
 
 @registry.env("go2-flat-terrain-walk", sim_backend="np")
@@ -141,9 +110,7 @@ class Go2WalkTask(NpEnv):
                 self.hip_indices.append(i)
             if "calf" in self._model.actuator_names[i]:
                 self.calf_indices.append(i)
-        print("Default joint angles:", self.default_angles)
-        print("Actuator names:", self._model.actuator_names)
- 
+
         self._init_dof_pos[-self._num_action :] = self.default_angles
 
         self.ground = self._model.get_geom_index(cfg.asset.ground)
@@ -213,7 +180,7 @@ class Go2WalkTask(NpEnv):
         gyro = self.get_gyro(data)
         pose = self._body.get_pose(data)
         base_quat = pose[:, 3:7]
-        local_gravity = quat_rotate_inverse(base_quat, self.gravity_vec)
+        local_gravity = quaternion.rotate_inverse(base_quat, self.gravity_vec)
         diff = self.get_dof_pos(data) - self.default_angles
         noisy_linvel = linear_vel * self.cfg.normalization.lin_vel
         noisy_gyro = gyro * self.cfg.normalization.ang_vel
@@ -343,7 +310,7 @@ class Go2WalkTask(NpEnv):
         # Penalize non flat base orientation
         pose = self._body.get_pose(data)
         base_quat = pose[:, 3:7]
-        gravity = quat_rotate_inverse(base_quat, self.gravity_vec)
+        gravity = quaternion.rotate_inverse(base_quat, self.gravity_vec)
         return np.sum(np.square(gravity[:, :2]), axis=1)
 
     def _reward_torques(self, data: mtx.SceneData):

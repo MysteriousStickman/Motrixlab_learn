@@ -30,4 +30,4 @@ class CheetahEnvCfg(EnvCfg):
     render_spacing: float = 2.0
     sim_dt: float = 0.01
     ctrl_dt: float = 0.025
-    run_speed: float = 30.0
+    run_speed: float = 10.0

@@ -5,6 +5,7 @@
 :maxdepth: 1
 
 getting_started/installation
+getting_started/container_deployment
 getting_started/hello_motrixlab
 
 ```
@@ -25,16 +26,22 @@ tutorial/training_and_result
 :caption: Training Examples
 :maxdepth: 1
 
+demo/acrobot
 demo/cartpole
+demo/pendulum
 demo/bounce_ball
 demo/dm_walker
 demo/dm_cheetah
 demo/dm_hopper
 demo/dm_reacher
+demo/dm_finger
+demo/dm_humanoid
+demo/bring_ball
 demo/locomotion_unitree_go1
 demo/locomotion_unitree_go1_rough_terrain
 demo/anymal_c
 demo/franka_lift_cube
 demo/franka_open_cabinet
+demo/shadow_hand_repose
 
 ```

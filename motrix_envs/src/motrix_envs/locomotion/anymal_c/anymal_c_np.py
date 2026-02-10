@@ -19,7 +19,7 @@ import motrixsim as mtx
 import numpy as np
 
 from motrix_envs import registry
-from motrix_envs.math.quaternion import Quaternion
+from motrix_envs.math import quaternion
 from motrix_envs.np.env import NpEnv, NpEnvState
 
 from .cfg import AnymalCEnvCfg
@@ -185,7 +185,7 @@ class AnymalCEnv(NpEnv):
         # Get commands - convert to relative velocity commands
         pose_commands = state.info["pose_commands"]
         robot_position = root_pos[:, :2]
-        robot_heading = Quaternion.get_yaw(root_quat)
+        robot_heading = quaternion.get_yaw(root_quat)
         target_position = pose_commands[:, :2]
         target_heading = pose_commands[:, 2]
 
@@ -295,14 +295,14 @@ class AnymalCEnv(NpEnv):
         )
         robot_arrow_pos = robot_pos.copy()
         robot_arrow_pos[:, 2] = arrow_height
-        robot_arrow_quat = Quaternion.from_euler(0, 0, cur_yaw)
+        robot_arrow_quat = quaternion.from_euler(0, 0, cur_yaw)
         mocap = self._model.get_body("robot_heading_arrow").mocap
         mocap.set_pose(data, np.concatenate([robot_arrow_pos, robot_arrow_quat], axis=1))
 
         des_yaw = np.where(
             np.linalg.norm(desired_vel_xy, axis=1) > 1e-6, np.arctan2(desired_vel_xy[:, 1], desired_vel_xy[:, 0]), 0.0
         )
-        desired_arrow_quat = Quaternion.from_euler(0, 0, des_yaw)
+        desired_arrow_quat = quaternion.from_euler(0, 0, des_yaw)
         mocap = self._model.get_body("desired_heading_arrow").mocap
         mocap.set_pose(data, np.concatenate([robot_arrow_pos, desired_arrow_quat], axis=1))
 
@@ -350,7 +350,7 @@ class AnymalCEnv(NpEnv):
 
         # Get robot position and heading for arrival determination
         robot_position = pose[:, :2]
-        robot_heading = Quaternion.get_yaw(root_quat)
+        robot_heading = quaternion.get_yaw(root_quat)
         target_position = info["pose_commands"][:, :2]
         target_heading = info["pose_commands"][:, 2]
         position_error = target_position - robot_position
@@ -454,7 +454,7 @@ class AnymalCEnv(NpEnv):
         arrow_pos = pose_commands.copy()
         arrow_pos[:, 2] = 0.05
         arrow_pos = np.column_stack([pose_commands[:, 0], pose_commands[:, 1], np.full((num_envs, 1), 0.5)])
-        arrow_quat = Quaternion.from_euler(0, 0, pose_commands[:, 2])
+        arrow_quat = quaternion.from_euler(0, 0, pose_commands[:, 2])
         mocap = self._model.get_body("target_marker").mocap
         mocap.set_pose(data, np.concatenate([arrow_pos, arrow_quat], axis=1))
 
@@ -490,7 +490,7 @@ class AnymalCEnv(NpEnv):
 
         return state.replace(terminated=terminated)
 
-    def reset(self, data: mtx.SceneData, done: np.ndarray = None) -> tuple[np.ndarray, dict]:
+    def reset(self, data: mtx.SceneData) -> tuple[np.ndarray, dict]:
         cfg: AnymalCEnvCfg = self._cfg
         num_envs = data.shape[0]
 
@@ -563,7 +563,7 @@ class AnymalCEnv(NpEnv):
 
         # Calculate velocity commands (consistent with update_state)
         robot_position = root_pos[:, :2]
-        robot_heading = Quaternion.get_yaw(root_quat)
+        robot_heading = quaternion.get_yaw(root_quat)
         target_position = pose_commands[:, :2]
         target_heading = pose_commands[:, 2]
 
@@ -651,4 +651,4 @@ class AnymalCEnv(NpEnv):
 
     def _compute_projected_gravity(self, quat: np.ndarray) -> np.ndarray:
         gravity = np.array([0.0, 0.0, -1.0], dtype=np.float32)
-        return Quaternion.rotate_vector(quat, gravity)
+        return quaternion.rotate_vector(quat, gravity)

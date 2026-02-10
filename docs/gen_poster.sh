@@ -78,21 +78,10 @@ for video_file in "$SOURCE_DIR"/*; do
 
         echo "⏳ Processing '$filename'..."
 
-        # Extract first frame using ffmpeg with timeout
-        if [ -n "$FFMPEG_TIMEOUT" ]; then
-            # Use timeout if available
-            if timeout 30 ffmpeg -i "$video_file" -vframes 1 -q:v 2 "$output_file" -y -loglevel error 2>&1; then
-                ffmpeg_success=true
-            else
-                ffmpeg_success=false
-            fi
+        if ffmpeg -i "$video_file" -vframes 1 -q:v 2 "$output_file" -y -loglevel error 2>&1; then
+            ffmpeg_success=true
         else
-            # No timeout available, run ffmpeg directly
-            if ffmpeg -i "$video_file" -vframes 1 -q:v 2 "$output_file" -y -loglevel error 2>&1; then
-                ffmpeg_success=true
-            else
-                ffmpeg_success=false
-            fi
+            ffmpeg_success=false
         fi
 
         if $ffmpeg_success; then

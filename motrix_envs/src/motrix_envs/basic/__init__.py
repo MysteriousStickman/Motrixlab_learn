@@ -13,4 +13,16 @@
 # limitations under the License.
 # ==============================================================================
 
-from . import bounce_ball, cartpole, cheetah, hopper, reacher, walker  # noqa: F401 import to register envs
+from . import (  # noqa: F401 import to register envs
+    acrobot,
+    bounce_ball,
+    cartpole,
+    cheetah,
+    finger,
+    hopper,
+    humanoid,
+    manipulator,
+    pendulum,
+    reacher,
+    walker,
+)

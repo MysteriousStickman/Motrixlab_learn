@@ -18,7 +18,7 @@ import motrixsim as mtx
 import numpy as np
 
 from motrix_envs import registry
-from motrix_envs.math.quaternion import Quaternion
+from motrix_envs.math import quaternion
 from motrix_envs.np.env import NpEnv, NpEnvState
 
 from .cfg import FrankaOpenCabinetEnvCfg
@@ -206,7 +206,7 @@ class FrankaOpenCabinetEnv(NpEnv):
         dist_reward *= 10
 
         ## matching orientation reward
-        quat_reward = Quaternion.similarity(robot_grasp_pose[:, -4:], drawer_grasp_pose[:, -4:])
+        quat_reward = quaternion.similarity(robot_grasp_pose[:, -4:], drawer_grasp_pose[:, -4:])
 
         ## close gripper reward
         # When gripper distance < 0.025, closing gripper gets reward
@@ -227,6 +227,7 @@ class FrankaOpenCabinetEnv(NpEnv):
         open_reward = (
             np.bitwise_not(wrong_open) * open_reward
         )  # No reward for forced opening (can't force open after increasing MJCF resistance)
+        quat_reward = np.where(open_reward > 0, 1.0, quat_reward)
 
         ##################### Penalty Terms #####################"
         ## Action penalty

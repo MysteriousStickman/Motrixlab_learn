@@ -14,13 +14,14 @@
 
   <asset>
     <hfield name="hfield" file="assets/heightmap.png" size="20 20 2.5 0.1" />
+    <hfield name="hfield-plane" nrow="2" ncol="2" elevation="0 0 0 0" size="20 20 1.0 0.1" />
   </asset>
 
   <worldbody>
     <light pos="0 0 1.5" dir="0 0 -1" directional="true" />
-    <geom name="floor" pos="0 0 -3" size="0 0 0.01" type="plane" material="motphys-ground"
-      contype="1" conaffinity="0" priority="1" friction="0.6" condim="3" />
-    <geom name="floor_rough" pos="0 0 -1" type="hfield" hfield="hfield" material="motphys-ground"
+    <geom name="floor_rough" pos="0 0 0" type="hfield" hfield="hfield" material="motphys-ground"
+      contype="1" conaffinity="0" priority="1" friction="0.6" />
+    <geom name="floor" pos="0 40 0" type="hfield" hfield="hfield-plane" material="motphys-ground"
       contype="1" conaffinity="0" priority="1" friction="0.6" />
   </worldbody>
 </mujoco>

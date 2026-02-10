@@ -19,7 +19,7 @@ import numpy as np
 
 from motrix_envs import registry
 from motrix_envs.locomotion.go1.cfg import Go1WalkNpRoughEnvCfg
-from motrix_envs.math.quaternion import Quaternion
+from motrix_envs.math import quaternion
 from motrix_envs.np.env import NpEnv, NpEnvState
 
 from .common import generate_repeating_array
@@ -44,18 +44,15 @@ class Go1WalkRoughTask(NpEnv):
             (self._num_dof_vel,),
             dtype=np.float32,
         )
-        self.height_list = np.array([-2.5, 0.5, 2.0])
-        offset_h = [[2, 2, 1, 1, 1], [2, 2, 1, 1, 2], [2, 1, 1, 1, 1], [2, 1, 1, 1, 1], [2, 1, 1, 1, 1]]
-        offset = []
-        for i in range(5):
-            for j in range(5):
-                h_index = offset_h[j][i]
-                offset.append([(i - 2) * 8.0, (j - 2) * 8.0, self.height_list[h_index]])
-        self.offset_list = np.array(offset)
+
+        go1_init_height = 0.3
+        self.reset_offset = self._generate_init_offsets(go1_init_height)
         self._init_dof_pos = self._model.compute_init_dof_pos()
-        self._init_dof_pos[2] = self.height_list[0]
+        geom_floor_pos = self._model.get_geom("floor").local_pose[:3]
+        geom_floor_pos[2] += go1_init_height
+        self._init_dof_pos[:3] = geom_floor_pos
         self._init_buffer()
-        self.height_counter = 0
+        self.reset_counter = 0
 
     def _init_obs_space(self):
         model = self.model
@@ -216,7 +213,7 @@ class Go1WalkRoughTask(NpEnv):
         gyro = self.get_gyro(data)
         pose = self._body.get_pose(data)
         base_quat = pose[:, 3:7]
-        local_gravity = Quaternion.rotate_inverse(base_quat, self.gravity_vec)
+        local_gravity = quaternion.rotate_inverse(base_quat, self.gravity_vec)
         diff = self.get_dof_pos(data) - self.default_angles
         noisy_linvel = linear_vel * self.cfg.normalization.lin_vel
         noisy_gyro = gyro * self.cfg.normalization.ang_vel
@@ -309,9 +306,9 @@ class Go1WalkRoughTask(NpEnv):
 
         if self.training_level == 1:
             num_period = 25
-            idx = generate_repeating_array(num_period, num_reset, self.height_counter)
-            self.height_counter = (self.height_counter + num_reset) % num_period
-            dof_pos[:, :3] = self.offset_list[idx]
+            idx = generate_repeating_array(num_period, num_reset, self.reset_counter)
+            self.reset_counter = (self.reset_counter + num_reset) % num_period
+            dof_pos[:, :3] = self.reset_offset[idx]
 
         data.reset(self._model)
         data.set_dof_vel(dof_vel)
@@ -364,7 +361,7 @@ class Go1WalkRoughTask(NpEnv):
         # Penalize non flat base orientation
         pose = self._body.get_pose(data)
         base_quat = pose[:, 3:7]
-        gravity = Quaternion.rotate_inverse(base_quat, self.gravity_vec)
+        gravity = quaternion.rotate_inverse(base_quat, self.gravity_vec)
         return np.sum(np.square(gravity[:, :2]), axis=1)
 
     def _reward_torques(self, data: mtx.SceneData):
@@ -433,5 +430,48 @@ class Go1WalkRoughTask(NpEnv):
         # check whether the robot reaching into the terrain border and change the move direction
         border_size = 19.0
         position = self._body.get_position(data)
-        is_out = (np.square(position[:, :2]) > border_size**2).any(axis=1)
+        geom_floor = self._model.get_geom("floor")
+        geom_floor_rough = self._model.get_geom("floor_rough")
+        in_rough_aera = self._is_in_area(position, border_size, border_size, geom_floor_rough.local_pose[:2])
+        in_flat_aera = self._is_in_area(position, border_size, border_size, geom_floor.local_pose[:2])
+        is_out = ~(in_rough_aera | in_flat_aera)
         info["commands"][is_out] = [0, 0, 0]
+
+    def _is_in_area(self, pos, length, width, offset):
+        x = pos[:, 0]
+        y = pos[:, 1]
+        return (
+            ((offset[0] - length) < x)
+            & ((offset[0] + length) > x)
+            & ((offset[1] - width) < y)
+            & ((offset[1] + width) > y)
+        )
+
+    def _generate_init_offsets(self, init_height: float, grid_size: tuple[int, int] = (5, 5)) -> np.ndarray:
+        """Generate initialization offsets for rough terrain training."""
+        hfield = self._model.get_geom("floor_rough").hfield
+        nx, ny = grid_size
+
+        # Vectorized grid generation
+        idx_x, idx_y = np.meshgrid(np.arange(nx), np.arange(ny, dtype=np.float32), indexing="ij")
+        idx_x, idx_y = idx_x.flatten(), idx_y.flatten()
+
+        # Map to heightfield indices and get heights
+        hfield_idx_x = (hfield.ncol * idx_x // nx).astype(int)
+        hfield_idx_y = (hfield.nrow * idx_y // ny).astype(int)
+        heights = np.array([hfield.get(iy, ix) for ix, iy in zip(hfield_idx_x, hfield_idx_y)])
+
+        # Calculate positions
+        grid_len_x = (hfield.bound[3] - hfield.bound[0]) / nx
+        grid_len_y = (hfield.bound[4] - hfield.bound[1]) / ny
+        center_offset = np.array([grid_len_x / 2, grid_len_y / 2])
+
+        offsets = np.column_stack(
+            [
+                hfield.bound[0] + grid_len_x * idx_x + center_offset[0],
+                hfield.bound[4] - grid_len_y * idx_y - center_offset[1],
+                heights + init_height,
+            ]
+        ).astype(np.float32)
+
+        return offsets

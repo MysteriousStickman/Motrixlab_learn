@@ -161,6 +161,20 @@ MotrixLab is a general-purpose machine learning architecture designed for robot 
 
 :::{grid-item-card}
 
+```{video} _static/videos/dm_humanoid_run.mp4
+:poster: _static/images/poster/dm_humanoid_run.jpg
+:nocontrols:
+:autoplay:
+:playsinline:
+:muted:
+:loop:
+:width: 100%
+```
+
+:::
+
+:::{grid-item-card}
+
 ```{video} _static/videos/bounce_ball.mp4
 :poster: _static/images/poster/bounce_ball.jpg
 :nocontrols:

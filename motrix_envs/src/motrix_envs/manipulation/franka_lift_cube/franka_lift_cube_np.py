@@ -240,11 +240,11 @@ class FrankaLiftCubeEnv(NpEnv):
 
         ## action penalty rate
         reach_weight = 1.5  # Cannot be too small
-        cmd_tracking_weight = 10
-        cmd_tracking_fine_graind_weight = 20  # Should be larger, need strong pull to target area
-        object_command_tracking_close_reward_weight = 10
+        cmd_tracking_weight = 10.0
+        cmd_tracking_fine_graind_weight = 20.0  # Should be larger, need strong pull to target area
+        object_command_tracking_close_reward_weight = 10.0
 
-        if self.count < 10000:
+        if self.count < 20000:
             action_penalty_rate = 1e-4
             joint_vel_penalty_rate = 1e-4
         else:

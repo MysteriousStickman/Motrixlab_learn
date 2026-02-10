@@ -41,22 +41,22 @@ class ControlConfig:
 @dataclass
 class InitState:
     # the initial position of the robot in the world frame
-    pos = [0.0, 0.0, 0.42] #0.278
+    pos = [0.0, 0.0, 0.42]  # 0.278
 
     # the default angles for all joints. key = joint name, value = target angle [rad]
     default_joint_angles = {
-        "FL_hip"    :  0.1,  # [rad]
-        "FL_thigh"  :  0.9,  # [rad]
-        "FL_calf"   : -1.8,  # [rad]
-        "FR_hip"    : -0.1,  # [rad]
-        "FR_thigh"  :  0.9,  # [rad]
-        "FR_calf"   : -1.8,  # [rad]
-        "RL_hip"    :  0.1,  # [rad]
-        "RL_thigh"  :  0.9,  # [rad]
-        "RL_calf"   : -1.8,  # [rad]
-        "RR_hip"    : -0.1,  # [rad]
-        "RR_thigh"  :  0.9,  # [rad]
-        "RR_calf"   : -1.8,  # [rad]
+        "FL_hip": 0.1,  # [rad]
+        "FL_thigh": 0.9,  # [rad]
+        "FL_calf": -1.8,  # [rad]
+        "FR_hip": -0.1,  # [rad]
+        "FR_thigh": 0.9,  # [rad]
+        "FR_calf": -1.8,  # [rad]
+        "RL_hip": 0.1,  # [rad]
+        "RL_thigh": 0.9,  # [rad]
+        "RL_calf": -1.8,  # [rad]
+        "RR_hip": -0.1,  # [rad]
+        "RR_thigh": 0.9,  # [rad]
+        "RR_calf": -1.8,  # [rad]
     }
 
 
@@ -64,7 +64,7 @@ class InitState:
 class Commands:
     vel_limit = [
         [-2.0, -1.0, -3.1416],  # min: vel_x [m/s], vel_y [m/s], ang_vel [rad/s]
-        [ 2.0,  1.0,  3.1416],  # max
+        [2.0, 1.0, 3.1416],  # max
     ]
 
 
@@ -82,8 +82,13 @@ class Asset:
     foot_name = "foot"
     penalize_contacts_on = ["thigh", "calf"]
     terminate_after_contacts_on = [
-        "base_collision_0", "base_collision_1", "base_collision_2",
-        "fl_hip_0", "fr_hip_0", "rl_hip_0", "rr_hip_0",
+        "base_collision_0",
+        "base_collision_1",
+        "base_collision_2",
+        "fl_hip_0",
+        "fr_hip_0",
+        "rl_hip_0",
+        "rr_hip_0",
     ]
     ground = "floor"
 

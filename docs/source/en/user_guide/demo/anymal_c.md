@@ -1,4 +1,4 @@
-# ANYmal-C Locomotion
+# ANYmal-C Navigation
 
 ## Overview
 

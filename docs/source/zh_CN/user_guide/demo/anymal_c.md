@@ -1,4 +1,4 @@
-# ANYmal-C Locomotion
+# ANYmal-C 导航
 
 ## 概述
 
