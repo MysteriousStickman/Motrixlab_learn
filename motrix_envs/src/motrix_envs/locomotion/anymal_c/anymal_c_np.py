@@ -38,15 +38,15 @@ class AnymalCEnv(NpEnv):
         # Get target marker body
         self._target_marker_body = self._model.get_body("target_marker")
 
-        self._action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(12,), dtype=np.float32)
+        self._action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(12,), dtype=np.float32)  # 动作空间 12维度 每个维度范围[-1, 1]
         # Observation space: linvel(3) + gyro(3) + gravity(3) + joint_pos(12) + joint_vel(12) + last_actions(12) +
         # commands(3) + position_error(2) + heading_error(1) + distance(1) + reached_flag(1) + stop_ready_flag(1) = 54
         self._observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(54,), dtype=np.float32)
-        self._num_dof_pos = self._model.num_dof_pos
-        self._num_dof_vel = self._model.num_dof_vel
-        self._num_action = self._model.num_actuators
+        self._num_dof_pos = self._model.num_dof_pos  # 19  7(body:x,y,z+quat) + 12
+        self._num_dof_vel = self._model.num_dof_vel  # 18  6(3个线速度+角速度) + 12
+        self._num_action = self._model.num_actuators  # 12
 
-        self._init_dof_pos = self._model.compute_init_dof_pos()
+        self._init_dof_pos = self._model.compute_init_dof_pos()  # 根据xml定义关节顺序与body初始设定,同时根据cfg的各关节初始设定得来
         self._init_dof_vel = np.zeros(
             (self._model.num_dof_vel,),
             dtype=np.float32,
@@ -55,6 +55,9 @@ class AnymalCEnv(NpEnv):
         self._init_buffer()
 
     def _init_buffer(self):
+        """
+        主要是根据cfg中的关节位置，初始化机器人关节位置
+        """
         cfg = self._cfg
         self.default_angles = np.zeros(self._num_action, dtype=np.float32)
         # PD parameters controlled by kp and kv in XML
@@ -72,9 +75,11 @@ class AnymalCEnv(NpEnv):
 
         self._init_dof_pos[-self._num_action :] = self.default_angles
 
+
     def _init_contact_geometry(self):
         """Initialize geometry indices required for contact detection"""
         cfg = self._cfg
+        # 找到地面
         self.ground_index = self._model.get_geom_index(cfg.asset.ground_name)
 
         # Initialize contact detection matrix
@@ -155,6 +160,7 @@ class AnymalCEnv(NpEnv):
         return self._action_space
 
     def apply_action(self, actions: np.ndarray, state: NpEnvState):
+        # 实际动作空间
         # Save current action for incremental control
         if "current_action" not in state.info:
             state.info["current_actions"] = np.zeros_like(actions)
@@ -170,6 +176,7 @@ class AnymalCEnv(NpEnv):
         data = state.data
 
         # Get root state
+        # 通过传感器获取线速度
         root_pos, root_quat, root_vel = self._extract_root_state(data)
 
         # Joint states (leg joints)
@@ -177,9 +184,11 @@ class AnymalCEnv(NpEnv):
         joint_vel = self.get_dof_vel(data)  # [num_envs, 12]
         joint_pos_rel = joint_pos - self.default_angles
 
-        # Get sensor data
+        # # 通过传感器获取角速度
         base_lin_vel = root_vel[:, :3]
         gyro = self._model.get_sensor_value(self._cfg.sensor.base_gyro, data)
+
+        # 重力投影，正常情况下是[0, 0, -1]
         projected_gravity = self._compute_projected_gravity(root_quat)
 
         # Get commands - convert to relative velocity commands
@@ -209,7 +218,10 @@ class AnymalCEnv(NpEnv):
         reached_all = np.logical_and(reached_position, reached_heading)
 
         # Angular velocity command calculation + deadband
+        # P控制器：误差 → 角速度
         desired_yaw_rate = np.clip(heading_diff * 1.0, -1.0, 1.0)
+
+        # 2. 死区：小误差不控制 防止震荡
         deadband_yaw = np.deg2rad(8)
         desired_yaw_rate = np.where(np.abs(heading_diff) < deadband_yaw, 0.0, desired_yaw_rate)
 
@@ -236,17 +248,17 @@ class AnymalCEnv(NpEnv):
         reached_flag = reached_all.astype(np.float32)  # Whether target is reached
 
         # Calculate if zero_ang standard is met: reached and angular velocity close to zero
-        stop_ready = np.logical_and(reached_all, np.abs(gyro[:, 2]) < 5e-2)
-        stop_ready_flag = stop_ready.astype(np.float32)
+        stop_ready = np.logical_and(reached_all, np.abs(gyro[:, 2]) < 5e-2)  # 机器人到达目标位置并且朝向正确，此时要求机器人能够停稳
+        stop_ready_flag = stop_ready.astype(np.float32)  
 
         obs = np.concatenate(
             [
-                noisy_linvel,  # 3
-                noisy_gyro,  # 3
-                projected_gravity,  # 3
-                noisy_joint_angle,  # 12
-                noisy_joint_vel,  # 12
-                last_actions,  # 12
+                noisy_linvel,  # [num_envs, 3]
+                noisy_gyro,  # [num_envs, 3]
+                projected_gravity,  # [num_envs, 3]
+                noisy_joint_angle,  # [num_envs, 12]
+                noisy_joint_vel,  # [num_envs, 12]
+                last_actions,  # [num_envs, 12]
                 command_normalized,  # 3
                 position_error_normalized,  # 2 - Position error vector to target
                 heading_error_normalized[:, np.newaxis],  # 1 - Heading error
@@ -256,7 +268,7 @@ class AnymalCEnv(NpEnv):
             ],
             axis=-1,
         )
-        assert obs.shape == (data.shape[0], 54)
+        assert obs.shape == (data.shape[0], 54)  # [num_envs, 54]
 
         # Update target position marker
         self._update_target_marker(data, pose_commands)
@@ -315,13 +327,16 @@ class AnymalCEnv(NpEnv):
         termination_penalty = np.zeros(self._num_envs, dtype=np.float32)
 
         # Check if DOF velocity exceeds limit
-        dof_vel = self.get_dof_vel(data)
+        # 最大关节速度是否超限？   仿真是不是炸了？
+        dof_vel = self.get_dof_vel(data)  # [num_envs, 12] 关节角速度
         vel_max = np.abs(dof_vel).max(axis=1)
-        vel_overflow = vel_max > self._cfg.max_dof_vel
+        vel_overflow = vel_max > self._cfg.max_dof_vel  # 判断关节角速度是否超限
+        # vel_extreme：仿真不稳定  是不是炸了？
         vel_extreme = (np.isnan(dof_vel).any(axis=1)) | (np.isinf(dof_vel).any(axis=1)) | (vel_max > 1e6)
         termination_penalty = np.where(vel_overflow | vel_extreme, -20.0, termination_penalty)
 
         # Robot base contacts ground penalty
+        # 机器人是否倒地了？
         cquerys = self._model.get_contact_query(data)
         termination_check = cquerys.is_colliding(self.termination_contact)
         termination_check = termination_check.reshape((self._num_envs, self.num_termination_check))
@@ -329,8 +344,10 @@ class AnymalCEnv(NpEnv):
         termination_penalty = np.where(base_contact, -20.0, termination_penalty)
 
         # Side flip penalty
+        # 倾斜75度认为机器人发生侧翻，触发终止条件
         pose = self._body.get_pose(data)
         root_quat = pose[:, 3:7]
+        # 重力投影，正常情况下是[0, 0, -1]
         proj_g = self._compute_projected_gravity(root_quat)
         gxy = np.linalg.norm(proj_g[:, :2], axis=1)
         gz = proj_g[:, 2]
@@ -339,13 +356,14 @@ class AnymalCEnv(NpEnv):
         termination_penalty = np.where(side_flip_mask, -20.0, termination_penalty)
 
         # 1. Linear velocity tracking reward
-        base_lin_vel = self._model.get_sensor_value(self._cfg.sensor.base_linvel, data)
-        lin_vel_error = np.sum(np.square(velocity_commands[:, :2] - base_lin_vel[:, :2]), axis=1)
+        # 线速度跟踪奖励：鼓励机器人按照期望的线速度运动，减少误差
+        base_lin_vel = self._model.get_sensor_value(self._cfg.sensor.base_linvel, data)  # 机器人线速度:[num_envs, 3]
+        lin_vel_error = np.sum(np.square(velocity_commands[:, :2] - base_lin_vel[:, :2]), axis=1)  # 机器人线速度误差
         tracking_lin_vel = np.exp(-lin_vel_error / 0.25)  # tracking_sigma = 0.25
 
         # 2. Angular velocity tracking reward / heading error penalty (mixed strategy)
-        gyro = self._model.get_sensor_value(self._cfg.sensor.base_gyro, data)
-        ang_vel_error = np.square(velocity_commands[:, 2] - gyro[:, 2])
+        gyro = self._model.get_sensor_value(self._cfg.sensor.base_gyro, data)  # 机器人角速度:[num_envs, 3]
+        ang_vel_error = np.square(velocity_commands[:, 2] - gyro[:, 2])  # 机器人角速度误差
         tracking_ang_vel = np.exp(-ang_vel_error / 0.25)
 
         # Get robot position and heading for arrival determination
@@ -370,10 +388,12 @@ class AnymalCEnv(NpEnv):
         info["ever_reached"] = info.get("ever_reached", np.zeros(self._num_envs, dtype=bool))
         first_time_reach = np.logical_and(reached_all, ~info["ever_reached"])
         info["ever_reached"] = np.logical_or(info["ever_reached"], reached_all)
+        # 首次到达奖励一次大的
         arrival_bonus = np.where(first_time_reach, 10.0, 0.0)
 
         # Distance approach reward: incentivize getting closer to target
         # Use historical minimum distance to calculate progress
+        # 距离接近奖励：鼓励机器人接近目标位置
         if "min_distance" not in info:
             info["min_distance"] = distance_to_target.copy()
         distance_improvement = info["min_distance"] - distance_to_target
@@ -382,7 +402,9 @@ class AnymalCEnv(NpEnv):
 
         # 3. Orientation stability reward (penalize deviation from normal standing posture)
         # When standing normally, projected_gravity ≈ [0, 0, -1]
+        # 重力投影：正常情况下是:[0, 0, -1]
         projected_gravity = self._compute_projected_gravity(root_quat)
+        # 重力投影各分量平方和，最小值为0。此项目为负奖励，鼓励机器人保持平稳姿态
         orientation_penalty = (
             np.square(projected_gravity[:, 0])
             + np.square(projected_gravity[:, 1])
@@ -390,26 +412,33 @@ class AnymalCEnv(NpEnv):
         )
 
         # Arrival and stop determination (reward bonus)
-        speed_xy = np.linalg.norm(base_lin_vel[:, :2], axis=1)
-        zero_ang_mask = np.abs(gyro[:, 2]) < 0.05  # Relax to 0.05 rad/s ≈ 2.86°/s
-        zero_ang_bonus = np.where(np.logical_and(reached_all, zero_ang_mask), 6.0, 0.0)
-        stop_base = 2 * (0.8 * np.exp(-((speed_xy / 0.2) ** 2)) + 1.2 * np.exp(-((np.abs(gyro[:, 2]) / 0.1) ** 4)))
+        # 机器人平稳，不左右晃动
+        speed_xy = np.linalg.norm(base_lin_vel[:, :2], axis=1)  # 机器人线速度大小
+        zero_ang_mask = np.abs(gyro[:, 2]) < 0.05  # Relax to 0.05 rad/s ≈ 2.86°/s  机器人角速度:[num_envs, 3]   
+        zero_ang_bonus = np.where(np.logical_and(reached_all, zero_ang_mask), 6.0, 0.0)  # 平稳到达奖励
+        # 线速度、角速度越小，奖励越大，鼓励机器人停稳
+        stop_base = 2 * (0.8 * np.exp(-((speed_xy / 0.2) ** 2)) + 1.2 * np.exp(-((np.abs(gyro[:, 2]) / 0.1) ** 4)))  
         stop_bonus = np.where(reached_all, stop_base + zero_ang_bonus, 0.0)
 
         # 4. Z-axis linear velocity penalty
+        # Z轴线速度惩罚，鼓励机器人保持稳定的高度，避免跳跃或下落
         lin_vel_z_penalty = np.square(base_lin_vel[:, 2])
 
         # 5. XY-axis angular velocity penalty
+        # XY轴角速度惩罚，鼓励机器人保持稳定的姿态，避免翻滚或旋转
         ang_vel_xy_penalty = np.sum(np.square(gyro[:, :2]), axis=1)
 
         # 6. Torque penalty
+        # 力矩惩罚：节能、动作平滑、保护硬件
         torque_penalty = np.sum(np.square(data.actuator_ctrls), axis=1)
 
         # 7. Joint velocity penalty
-        joint_vel = self.get_dof_vel(data)
+        # 关节速度惩罚
+        joint_vel = self.get_dof_vel(data)  # [num_envs, 12] 关节角速度
         dof_vel_penalty = np.sum(np.square(joint_vel), axis=1)
 
         # 8. Action change penalty
+        # 动作变化惩罚：鼓励动作平滑，避免过度抖动
         action_diff = info["current_actions"] - info["last_actions"]
         action_rate_penalty = np.sum(np.square(action_diff), axis=1)
 
@@ -418,8 +447,9 @@ class AnymalCEnv(NpEnv):
         reward = np.where(
             reached_all,
             # After reaching: only stop reward and penalties
-            (
-                stop_bonus
+            # 如果机器人到达
+            (  
+                stop_bonus  # 
                 + arrival_bonus
                 - 2.0 * lin_vel_z_penalty
                 - 0.05 * ang_vel_xy_penalty
@@ -494,7 +524,9 @@ class AnymalCEnv(NpEnv):
         cfg: AnymalCEnvCfg = self._cfg
         num_envs = data.shape[0]
 
+        # ---------------------------随机化重置初始命令----------------------------
         # First generate robot initial position (in world coordinates)
+        # 命令初始位置随机范围：[-10, 10]，[-10, 10]
         pos_range = cfg.init_state.pos_randomization_range
         robot_init_x = np.random.uniform(
             pos_range[0],
@@ -510,22 +542,27 @@ class AnymalCEnv(NpEnv):
 
         # Generate target position: offset relative to robot initial position
         # pose_command_range now represents offset range relative to robot
+        # 命令初始位置xy施加偏移，偏移范围为[-5, 5]
         target_offset = np.random.uniform(
             low=cfg.commands.pose_command_range[:2], high=cfg.commands.pose_command_range[3:5], size=(num_envs, 2)
         ).astype(np.float32)
         target_positions = robot_init_pos + target_offset  # Target position in world coordinates
 
         # Generate target heading (absolute heading, random in horizontal direction)
+        # 命令朝向施加偏移，偏移范围为[-pi, pi]
         target_headings = np.random.uniform(
             low=cfg.commands.pose_command_range[2], high=cfg.commands.pose_command_range[5], size=(num_envs, 1)
         ).astype(np.float32)
 
         pose_commands = np.concatenate([target_positions, target_headings], axis=1)
 
+        # ---------------------------重置机器人初始状态：随机化位置、初始化朝向、关节---------------------------
+        # ---------------------------重置机器人初始速度：全为0---------------------------
         # Set initial state - avoid adding noise to quaternion
-        init_dof_pos = np.tile(self._init_dof_pos, (*data.shape, 1))
-        init_dof_vel = np.tile(self._init_dof_vel, (*data.shape, 1))
-
+        # 
+        init_dof_pos = np.tile(self._init_dof_pos, (*data.shape, 1))  # [num_envs, 19] 7(body) + 12(joint)
+        init_dof_vel = np.tile(self._init_dof_vel, (*data.shape, 1))  # [num_envs, 18] 6(body) + 12(joint)
+ 
         # Create noise - do not add noise to quaternion
         noise_pos = np.zeros((*data.shape, self._num_dof_pos), dtype=np.float32)
 
@@ -537,7 +574,9 @@ class AnymalCEnv(NpEnv):
         # All velocities set to 0, ensure completely stationary
         noise_vel = np.zeros((*data.shape, self._num_dof_vel), dtype=np.float32)
 
+        # 机器人随机初始位置
         dof_pos = init_dof_pos + noise_pos
+        # 机器人初c速度全为0
         dof_vel = init_dof_vel + noise_vel
 
         data.reset(self._model)
@@ -546,8 +585,11 @@ class AnymalCEnv(NpEnv):
         self._model.forward_kinematic(data)
 
         # Update target position marker
+        # 更新显示箭头
         self._update_target_marker(data, pose_commands)
 
+
+        # ------------------------------------------------------------------
         # Get root state
         root_pos, root_quat, root_vel = self._extract_root_state(data)
 
@@ -555,7 +597,7 @@ class AnymalCEnv(NpEnv):
         joint_pos = self.get_dof_pos(data)
         joint_vel = self.get_dof_vel(data)
         joint_pos_rel = joint_pos - self.default_angles
-
+        
         # Get sensor data
         base_lin_vel = root_vel[:, :3]
         gyro = self._model.get_sensor_value(self._cfg.sensor.base_gyro, data)
@@ -581,6 +623,7 @@ class AnymalCEnv(NpEnv):
         base_lin_vel_xy = base_lin_vel[:, :2]
 
         # Update arrow visualization (no physical effect)
+        # 更新机器人自身的可视化箭头
         self._update_heading_arrows(data, root_pos, desired_vel_xy, base_lin_vel_xy)
 
         heading_diff = target_heading - robot_heading
@@ -622,8 +665,8 @@ class AnymalCEnv(NpEnv):
 
         obs = np.concatenate(
             [
-                noisy_linvel,  # 3
-                noisy_gyro,  # 3
+                noisy_linvel,  # [num_envs, 3]
+                noisy_gyro,  # [num_envs, 3]
                 projected_gravity,  # 3
                 noisy_joint_angle,  # 12
                 noisy_joint_vel,  # 12

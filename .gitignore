@@ -2,6 +2,7 @@ __pycache__
 runs
 .pdm-python
 logs
+.vscode/
 .idea
 .claude
 .venv

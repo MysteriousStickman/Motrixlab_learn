@@ -49,18 +49,18 @@ class InitState:
 
     # the default angles for all joints. key = joint name, value = target angle [rad]
     default_joint_angles = {
-        "LF_HAA": 0.0,  # [rad]
-        "RF_HAA": 0.0,  # [rad]
-        "LH_HAA": 0.0,  # [rad]
-        "RH_HAA": 0.0,  # [rad]
-        "LF_HFE": 0.4,  # [rad]
-        "RF_HFE": 0.4,  # [rad]
-        "LH_HFE": -0.4,  # [rad]
-        "RH_HFE": -0.4,  # [rad]
-        "LF_KFE": -0.8,  # [rad]
-        "RF_KFE": -0.8,  # [rad]
-        "LH_KFE": 0.8,  # [rad]
-        "RH_KFE": 0.8,  # [rad]
+        "LF_HAA": 0.0,  # [rad]  左前腿髋关节外展/内收
+        "LF_HFE": 0.4,  # [rad]  左前腿髋关节屈伸
+        "LF_KFE": -0.8,  # [rad] 左前腿膝关节屈伸
+        "RF_HAA": 0.0,  # [rad]  右前腿髋关节外展/内收
+        "RF_HFE": 0.4,  # [rad]  右前腿髋关节屈伸
+        "RF_KFE": -0.8,  # [rad] 右前腿膝关节屈伸
+        "LH_HAA": 0.0,  # [rad]  左后腿髋关节外展/内收
+        "LH_HFE": -0.4,  # [rad] 左后腿髋关节屈伸
+        "LH_KFE": 0.8,  # [rad]  左后腿膝关节屈伸
+        "RH_HAA": 0.0,  # [rad]  右后腿髋关节外展/内收
+        "RH_HFE": -0.4,  # [rad] 右后腿髋关节屈伸
+        "RH_KFE": 0.8,  # [rad]  右后腿膝关节屈伸
     }
 
 
@@ -114,7 +114,7 @@ class AnymalCEnvCfg(EnvCfg):
     reset_noise_scale: float = 0.01
     max_episode_seconds: float = 7.0
     sim_dt: float = 0.01
-    ctrl_dt: float = 0.01
+    ctrl_dt: float = 0.01  # max_episode_seconds / ctrl_dt = 700 steps 规定了单个机器人最大步数限制700步，超过则强制截断，防止机器人进入无限循环
     reset_yaw_scale: float = 0.1
     max_dof_vel: float = 100.0  # maximum joint velocity threshold, greater tolerance during early training
 

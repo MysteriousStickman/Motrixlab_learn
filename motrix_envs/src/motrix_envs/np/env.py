@@ -114,14 +114,18 @@ class NpEnv(ABEnv):
         Reset the environments that are done
         """
         state = self._state
+        # 检查哪些机器人已经完成任务  np.logical_or(self.terminated, self.truncated)
         done = state.done
         assert done.shape == (self._num_envs,)
+        # 如果所有机器人都没完成任务， 就继续任务，只要有一个机器人完成任务，就重置该机器人
         if not np.any(done):
             return
 
         np.putmask(state.info["steps"], done, 0)
+        # 只提取那些“结束”的机器人的物理数据
         data = state.data[done]
         obs, info1 = self.reset(data)
+        # 将新生成的观测值写入“结束”机器人的数据中
         state.obs[done] = obs
         if info1:
 
@@ -142,7 +146,7 @@ class NpEnv(ABEnv):
         """
         Truncate the environments that have reached max episode length
         """
-        if not self._cfg.max_episode_steps:
+        if not self._cfg.max_episode_steps:  # 单个机器人最大步数限制700步，超过则强制截断，防止机器人进入无限循环
             return
         self._state.truncated = self._state.info["steps"] >= self._cfg.max_episode_steps
 

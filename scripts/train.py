@@ -15,7 +15,7 @@
 
 
 import logging
-
+import torch
 from absl import app, flags
 from skrl import config
 
@@ -103,7 +103,8 @@ def main(argv):
 
     # Determine the training backend
     train_backend = get_train_backend(device_supports, _TRAIN_BACKEND.value, rllib)
-
+    print(f"training backend: {train_backend}, RL framework: {rllib}")
+    print(f"torch.cuda.is_available(): {torch.cuda.is_available()}")
     trainer = None
     if rllib == "rslrl":
         # RSLRL training flow
