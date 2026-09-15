@@ -20,6 +20,7 @@ from motrix_envs import registry
 from motrix_envs.base import EnvCfg
 
 model_file = os.path.dirname(__file__) + "/xmls/scene.xml"
+model_rough_file = os.path.dirname(__file__) + "/xmls/scene_rough_terrain.xml"
 
 
 @dataclass
@@ -99,10 +100,26 @@ class Sensor:
 class RewardConfig:
     scales: dict[str, float] = field(
         default_factory=lambda: {
-            "termination": -400.0,
-            "position_tracking": 0.5,
-            "fine_position_tracking": 0.5,
-            "orientation": -0.2,
+            # 到达奖励
+            "stop_bonus": 1.0,
+            "arrival_bonus": 1.0,
+
+            # 未到达：跟踪奖励
+            "tracking_lin_vel": 1.5,
+            "tracking_ang_vel": 0.3 ,
+            "approach_reward": 1.0,
+
+            # 共有惩罚
+            "lin_vel_z_penalty": -2.0,
+            "ang_vel_xy_penalty": -0.05,
+            "orientation_penalty": -0.0,
+            "torque_penalty": -0.00001,
+            "dof_vel_penalty": -0.0,
+            "action_rate_penalty": -0.001,
+            "termination_penalty":1.0,
+            "feet_air_time_reward": 0.01,
+            "base_height_reward": 0.0,  # -0.01,
+            "lateral_penalty": 0.0  # -1.0
         }
     )
 
@@ -125,4 +142,34 @@ class AnymalCEnvCfg(EnvCfg):
     commands: Commands = field(default_factory=Commands)
     normalization: Normalization = field(default_factory=Normalization)
     asset: Asset = field(default_factory=Asset)
+    sensor: Sensor = field(default_factory=Sensor)
+
+
+@dataclass
+class Asset_Rough:
+    body_name = "base"
+    foot_names = ["LF_FOOT", "RF_FOOT", "LH_FOOT", "RH_FOOT"]
+    terminate_after_contacts_on = ["base"]
+    ground_plane_name = ["floor"]  
+    ground_rough_name = ["floor_rough"]  
+
+@registry.envcfg("anymal_c_navigation_rough")
+@dataclass
+class AnymalCRoughEnvCfg(EnvCfg):
+    render_spacing: float = 0.0
+    model_file: str = model_rough_file
+    reset_noise_scale: float = 0.01
+    max_episode_seconds: float = 15.0
+    sim_dt: float = 0.005  # 0.01
+    ctrl_dt: float = 0.01  # max_episode_seconds / ctrl_dt = 700 steps 规定了单个机器人最大步数限制700步，超过则强制截断，防止机器人进入无限循环
+    reset_yaw_scale: float = 0.1
+    max_dof_vel: float = 100.0  # maximum joint velocity threshold, greater tolerance during early training
+
+    noise_config: NoiseConfig = field(default_factory=NoiseConfig)
+    control_config: ControlConfig = field(default_factory=ControlConfig)
+    reward_config: RewardConfig = field(default_factory=RewardConfig)
+    init_state: InitState = field(default_factory=InitState)
+    commands: Commands = field(default_factory=Commands)
+    normalization: Normalization = field(default_factory=Normalization)
+    asset: Asset_Rough = field(default_factory=Asset_Rough)
     sensor: Sensor = field(default_factory=Sensor)

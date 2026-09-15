@@ -15,7 +15,7 @@
         </default>
       </default>
       <default class="collision">
-        <geom group="3" type="cylinder" contype="0" conaffinity="0"/>
+        <geom group="3" type="cylinder" contype="1" conaffinity="1"/>
         <default class="foot">
           <geom type="sphere" size="0.03" pos="0 0 0.02325" priority="1" solimp="0.015 1 0.03" contype="0" conaffinity="3"
             condim="6"

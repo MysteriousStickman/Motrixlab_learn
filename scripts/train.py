@@ -35,6 +35,7 @@ _TRAIN_BACKEND = flags.DEFINE_string("train-backend", None, "The learning backen
 _SEED = flags.DEFINE_integer("seed", None, "Random seed for reproducibility")
 _RAND_SEED = flags.DEFINE_bool("rand-seed", False, "Generate random seed")
 _RLLIB = flags.DEFINE_string("rllib", "skrl", "The RL framework (skrl/rslrl)")
+_REMUSE_POLICY = flags.DEFINE_string("policy", None, "Number of envs to train")
 
 
 def get_train_backend(supports: utils.DeviceSupports, train_backend_arg: str | None, rllib: str):
@@ -100,7 +101,6 @@ def main(argv):
 
     sim_backend = _SIM_BACKEND.value
     rllib = _RLLIB.value
-
     # Determine the training backend
     train_backend = get_train_backend(device_supports, _TRAIN_BACKEND.value, rllib)
     print(f"training backend: {train_backend}, RL framework: {rllib}")
@@ -127,7 +127,7 @@ def main(argv):
     else:
         raise Exception(f"Unknown train backend: {train_backend}")
 
-    trainer.train()
+    trainer.train(_REMUSE_POLICY.value)
 
 
 if __name__ == "__main__":

@@ -162,7 +162,7 @@ class AnymalCEnv(NpEnv):
     def apply_action(self, actions: np.ndarray, state: NpEnvState):
         # 实际动作空间
         # Save current action for incremental control
-        if "current_action" not in state.info:
+        if "current_actions" not in state.info:
             state.info["current_actions"] = np.zeros_like(actions)
         state.info["last_actions"] = state.info["current_actions"]
         state.info["current_actions"] = actions

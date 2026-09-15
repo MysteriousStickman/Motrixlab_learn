@@ -148,6 +148,7 @@ def main(argv):
 
     if _NUM_ENVS.present:
         rl_override["play_num_envs"] = _NUM_ENVS.value
+        print(_NUM_ENVS.value, '-----------------')
 
     if _RAND_SEED.value:
         rl_override["runner.seed"] = None

@@ -194,7 +194,7 @@ class Trainer:
         self._sim_backend = sim_backend
         self._enable_render = enable_render
 
-    def train(self) -> None:
+    def train(self, policy: str = None) -> None:
         """
         Start training the agent.
         """
@@ -208,6 +208,9 @@ class Trainer:
         # Add runtime-specific configuration
         _add_runtime_config(ppo_cfg, skrl_env, log_dir=get_log_dir(self._env_name, rllib="skrl", agent_name="PPO"))
         agent = self._make_agent(models, skrl_env, ppo_cfg, rlcfg.runner.memory)
+        if policy is not None:
+            print(f"remuse train: {policy}    --------------------")
+            agent.load(policy)
         cfg_trainer = {
             "timesteps": rlcfg.runner.trainer.timesteps,
             "headless": not self._enable_render,
@@ -219,6 +222,7 @@ class Trainer:
         import time
 
         rlcfg = self._rlcfg
+        print(f"rlcfg.play_num_envs: {rlcfg.play_num_envs}")
         env = env_registry.make(self._env_name, sim_backend=self._sim_backend, num_envs=rlcfg.play_num_envs)
         set_seed(rlcfg.runner.seed)
         env = wrap_env(env, self._enable_render)

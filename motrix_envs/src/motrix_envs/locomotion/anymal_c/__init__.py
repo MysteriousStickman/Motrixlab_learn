@@ -13,6 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 
-from . import anymal_c_np, cfg  # noqa: F401
+from . import anymal_c_np, anymal_c_rough,cfg  # noqa: F401
 from .anymal_c_np import AnymalCEnv  # noqa: F401
-from .cfg import AnymalCEnvCfg  # noqa: F401
+from .cfg import AnymalCEnvCfg, AnymalCRoughEnvCfg  # noqa: F401
