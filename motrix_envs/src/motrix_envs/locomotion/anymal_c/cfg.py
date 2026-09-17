@@ -119,7 +119,7 @@ class RewardConfig:
             "termination_penalty":1.0,
             "feet_air_time_reward": 0.01,
             "base_height_reward": 0.0,  # -0.01,
-            "lateral_penalty": 0.0  # -1.0
+            "lateral_penalty": 0.0
         }
     )
 
@@ -159,7 +159,7 @@ class AnymalCRoughEnvCfg(EnvCfg):
     render_spacing: float = 0.0
     model_file: str = model_rough_file
     reset_noise_scale: float = 0.01
-    max_episode_seconds: float = 15.0
+    max_episode_seconds: float = 13.0
     sim_dt: float = 0.005  # 0.01
     ctrl_dt: float = 0.01  # max_episode_seconds / ctrl_dt = 700 steps 规定了单个机器人最大步数限制700步，超过则强制截断，防止机器人进入无限循环
     reset_yaw_scale: float = 0.1

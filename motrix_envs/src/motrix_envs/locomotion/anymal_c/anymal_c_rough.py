@@ -308,8 +308,8 @@ class AnymalCEnv(NpEnv):
         reward = np.clip(reward, 0.0, 10000.0)
         rwd = np.where(terminated, np.array(0.0), reward)
         average_reward = np.average(rwd)
-        if average_reward > 2.5 and self.training_level == 0: 
-            # print(f"average_reward: {average_reward}, learning_level: 0 -> 1   !!! ")
+        if average_reward > 2.0 and self.training_level == 0: 
+            print(f"average_reward: {average_reward}, learning_level: 0 -> 1   !!! ")
             self.training_level = 1 
             self._update_dof_pos()
             self._init_contact_check()
@@ -798,19 +798,12 @@ class AnymalCEnv(NpEnv):
         tilt_angle = np.arctan2(gxy, np.abs(gz))
         side_flip = tilt_angle > np.deg2rad(75)  # 机器人过度倾斜
 
-        if self.training_level == 0:
-            terminated = (
-                vel_overflow
-                | vel_extreme
-                | base_contact
-                | side_flip
-            )
-        else:
-            terminated = (
-                vel_overflow
-                | vel_extreme
-                | base_contact
-            )
+        terminated = (
+            vel_overflow
+            | vel_extreme
+            | base_contact
+            | side_flip
+        )
 
         return {
             "vel_overflow": vel_overflow,
