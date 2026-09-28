@@ -505,28 +505,27 @@ class VBotSection01Env(NpEnv):
 
 
     def _get_obs(self, data: mtx.SceneData, info: dict):
-        cfg = self._cfg
-        
         # 获取基础状态
-        root_pos, root_quat, root_vel = self._extract_root_state(data)
+        pose = self._body.get_pose(data)
+        root_quat = pose[:, 3:7]
+        base_lin_vel_world = self._model.get_sensor_value(self._cfg.sensor.base_linvel, data)
+        local_lin_vel = Quaternion.rotate_inverse(root_quat, base_lin_vel_world)
+        gyro = self._model.get_sensor_value(self._cfg.sensor.base_gyro, data)
+        local_gravity = Quaternion.rotate_inverse(root_quat, self.gravity_vec)
         joint_pos = self.get_dof_pos(data)
         joint_vel = self.get_dof_vel(data)
         joint_pos_rel = joint_pos - self.default_angles
         
-        # 传感器数据
-        base_lin_vel = root_vel[:, :3]  # 世界坐标系线速度
-        gyro = self._model.get_sensor_value(cfg.sensor.base_gyro, data)
-        gravity_vec = Quaternion.rotate_inverse(root_quat, self.gravity_vec)
 
         # 足端触地状态
         foot_contact = self._get_foot_check(data)
 
-        terrain_scan = self._get_terrain_scan(root_pos[:, :2])
+        terrain_scan = self._get_terrain_scan(pose[:, :2])
         obs_base = np.hstack(
             [
-                base_lin_vel * self._cfg.normalization.lin_vel,
+                local_lin_vel * self._cfg.normalization.lin_vel,
                 gyro * self._cfg.normalization.ang_vel,
-                gravity_vec,
+                local_gravity,
                 joint_pos_rel * self._cfg.normalization.dof_pos,
                 joint_vel * self._cfg.normalization.dof_vel,
                 info["current_actions"],
@@ -534,7 +533,7 @@ class VBotSection01Env(NpEnv):
             ]
         )
         assert obs_base.shape == (data.shape[0], 48)
-        terrain_scan = self._get_terrain_scan(root_pos[:, :2])
+        terrain_scan = self._get_terrain_scan(pose[:, :2])
         obs = np.concatenate([obs_base, foot_contact, terrain_scan], axis=1)
 
         assert obs.shape == (data.shape[0], 60)
@@ -693,27 +692,14 @@ class VBotSection01Env(NpEnv):
         joint_pos = self.get_dof_pos(data)
         joint_vel = self.get_dof_vel(data)
         joint_pos_rel = joint_pos - self.default_angles
-        # robot_heading = quaternion.get_yaw(root_quat)
 
-        # # 朝向误差
-        # heading_diff = pose_commands[:, 2] - robot_heading
-        # heading_diff = np.where(
-        #     heading_diff > np.pi,
-        #     heading_diff - 2 * np.pi,
-        #     heading_diff,
-        # )
-        # heading_diff = np.where(
-        #     heading_diff < -np.pi,
-        #     heading_diff + 2 * np.pi,
-        #     heading_diff,
-        # )
-        # reached_heading = np.abs(heading_diff) < np.deg2rad(15)
 
         # 传感器数据
         base_lin_vel = root_vel[:, :3]  # 世界坐标系线速度
-        base_lin_vel_body = Quaternion.rotate_inverse(root_quat, base_lin_vel)
+        local_base_lin_vel_body = Quaternion.rotate_inverse(root_quat, base_lin_vel)
         gyro = self._model.get_sensor_value(cfg.sensor.base_gyro, data)
-        body_speed_xy = np.linalg.norm(base_lin_vel_body[:, :2], axis=1)
+        body_speed_xy = np.linalg.norm(local_base_lin_vel_body[:, :2], axis=1)
+        
         
         # 导航目标
         pose_commands = info["waypoints"][np.arange(num_envs), target_idx]
@@ -738,7 +724,7 @@ class VBotSection01Env(NpEnv):
 
 
         # 线速度跟踪奖励：鼓励机器人按照期望的线速度运动，减少误差
-        lin_vel_error = np.sum(np.square(commands[:, :2] - base_lin_vel_body[:, :2]), axis=1)  # 机器人线速度误差
+        lin_vel_error = np.sum(np.square(commands[:, :2] - local_base_lin_vel_body[:, :2]), axis=1)  # 机器人线速度误差
         tracking_lin_vel = np.exp(-lin_vel_error / 0.25)  # tracking_sigma = 0.25
         ang_vel_error = np.square(commands[:, 2] - gyro[:, 2])
         tracking_ang_vel_reward = np.exp(-ang_vel_error / 0.25)
@@ -747,6 +733,15 @@ class VBotSection01Env(NpEnv):
         command_speed_xy = np.linalg.norm(commands[:, :2], axis=1)
         speed_deficit = np.clip(command_speed_xy - body_speed_xy, 0.0, None)
         active_move = (command_speed_xy > 0.05).astype(np.float32)
+
+
+        target_rel_world = np.zeros((data.shape[0], 3), dtype=np.float32)
+        target_rel_world[:, :2] = target_position - root_pos[:, :2]
+        target_rel_body = Quaternion.rotate_inverse(root_quat, target_rel_world)[:, :2]
+        target_dir_body = target_rel_body / (np.linalg.norm(target_rel_body, axis=1, keepdims=True) + 1e-6)
+        tracking_goal_vel = np.minimum(np.sum(target_dir_body * local_base_lin_vel_body[:, :2], axis=1), commands[:, 0])
+        tracking_goal_vel = tracking_goal_vel / (np.abs(commands[:, 0]) + 1e-5)
+        tracking_goal_vel = np.clip(tracking_goal_vel, -1.0, 1.0) * active_move
         
         
         # 力矩惩罚：节能、动作平滑、保护硬件
@@ -769,21 +764,24 @@ class VBotSection01Env(NpEnv):
         in_pit = self._pit_zone_mask(root_pos[:, 1]).astype(np.float32)
         swing_ok = np.logical_and(n_contact >= 2, n_contact <= 3).astype(np.float32)
 
-        arrival_bonus = np.where(info["reached_waypoint"], 5.0, 0.0)
+        arrival_bonus = np.where(info["reached_waypoint"], 1.0, 0.0)
 
         # 到达最终奖励更大的
         is_finish = info["is_finish"]
-        arrival_final_bonus = np.where(is_finish, 25.0, 0.0)
+        arrival_final_bonus = np.where(is_finish, 1.0, 0.0)
 
         
         reward_dict = {
             "is_finish": arrival_final_bonus,  # 最终到达奖励
             "arrival_bonus": arrival_bonus,    # 到达各waypoint奖励
+
             "ang_vel_xy_penalty": ang_vel_xy_penalty,  # xy角速度惩罚，鼓g机器人保持稳定姿态
             "distance_to_target": approach_reward,  # 接近目标奖励
             "tracking_lin_vel_reward": tracking_lin_vel,   # 线速度跟踪奖励
             "tracking_ang_vel_reward": tracking_ang_vel_reward,  # 角速度跟踪奖励
+            "tracking_goal_vel": tracking_goal_vel,
             "feet_air_time_reward": feet_air_time_reward,  # 步态奖励
+
             "torque_penalty": torque_penalty,    # 力矩惩罚
             "action_rate_penalty": action_rate_penalty,  # 动作剧烈变化惩罚
             "termination_penalty": termination_penalty,  # 终止惩罚

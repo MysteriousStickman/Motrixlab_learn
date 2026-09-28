@@ -132,13 +132,14 @@ class RewardConfig:
 class RewardConfigSection01:
     scales: dict[str, float] = field(
         default_factory=lambda: {
-            "is_finish": 1.0,
-            "arrival_bonus": 1.0,
-            "ang_vel_xy_penalty": -0.3,
+            "is_finish": 20.0,
+            "arrival_bonus": 8.0,
+            "ang_vel_xy_penalty": -0.5,
             "distance_to_target": 1.0,
-            "tracking_lin_vel_reward": 3.5,
-            "tracking_ang_vel_reward": 1.5,
-            "feet_air_time_reward": 3.0,
+            "tracking_lin_vel_reward": 4.0,
+            "tracking_ang_vel_reward": 2.0,
+            "tracking_goal_vel": 5.0,
+            "feet_air_time_reward": 4.0,
             "torque_penalty": -0.00001,
             "action_rate_penalty": -0.001,
             "termination_penalty": -10.0,
@@ -207,7 +208,7 @@ class VBotSection01EnvCfg(VBotStairsEnvCfg):
     model_file: str = os.path.dirname(__file__) + "/xmls/scene_section01.xml"
     max_episode_seconds: float = 40  # 拉长一倍：从20秒增加到40秒
     max_episode_steps: int = 4000 # 拉长一倍：从2000步增加到4000步
-    stuck_timeout_seconds: float = 3.0
+    stuck_timeout_seconds: float = 4.0
     stuck_min_displacement: float = 0.15
     stuck_command_threshold: float = 0.1
     render_spacing = 0.0
