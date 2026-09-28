@@ -109,6 +109,14 @@ class PPO(BasePPO):
             timestep,
             timesteps,
         )
+        if "reward_dict_scaled" in infos:
+            for key, value in infos["reward_dict_scaled"].items():
+                value = torch.tensor(value, device=self.device)
+                self.tracking_data[f"Reward detail_mean / {key} (mean)"].append(torch.mean(value).item())
+                self.tracking_data[f"Reward detail_min / {key} (min)"].append(torch.min(value).item())
+                self.tracking_data[f"Reward detail_max / {key} (max)"].append(torch.max(value).item())
+
+
         if "Reward" in infos:
             for key, value in infos["Reward"].items():
                 value = torch.tensor(value, device=self.device)

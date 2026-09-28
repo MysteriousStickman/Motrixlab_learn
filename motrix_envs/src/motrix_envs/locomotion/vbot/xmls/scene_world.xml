@@ -20,9 +20,9 @@
     <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
     
     <!-- 加载三段地形模型 -->
-    <model name="section01C" file="./0120_C_section01.xml"/>
-    <model name="section02C" file="./0120_C_section02.xml"/>
-    <model name="section03C" file="./0122_C_section03.xml"/>
+    <model name="section01C" file="../world_0122/section01/0120_C_section01.xml"/>
+    <model name="section02C" file="../world_0122/section02/0120_C_section02.xml"/>
+    <model name="section03C" file="../world_0122/section03/0122_C_section03.xml"/>
   </asset>
 
   <worldbody>

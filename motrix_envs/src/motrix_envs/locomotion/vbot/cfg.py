@@ -79,9 +79,24 @@ class Normalization:
 @dataclass
 class Asset:
     body_name = "base"
-    foot_names = ["FR", "FL", "RR", "RL"]
+    foot_names = ["FR_foot_contact_{}", "FL_foot_contact_{}", "RR_foot_contact_{}", "RL_foot_contact_{}"]
     terminate_after_contacts_on = ["collision_middle_box", "collision_head_box"]
-    ground_subtree = "C_"  # 地形根节点，用于subtree接触检测
+    undesired_contacts_on: list[str] = field(
+            default_factory=lambda: [
+                "collision_mainlink_box",
+                "collision_motor_cylinder",
+                "collision_revo_left_box",
+                "collision_revo_right_box",
+                "collision_upper_box",
+                "collision_lower_box",
+                "collision_backprotect_box",
+                "collision_low_bar_FL_box",
+                "collision_low_bar_FR_box",
+                "collision_low_bar_RL_box",
+                "collision_low_bar_RR_box",
+            ]
+        )
+    ground_subtree = "base_contact_{}"  # 地形根节点，用于subtree接触检测
    
 @dataclass
 class Sensor:
@@ -110,6 +125,25 @@ class RewardConfig:
             
             # ===== 终止惩罚 =====
             "termination": -200.0,          # 终止惩罚
+        }
+    )
+
+@dataclass
+class RewardConfigSection01:
+    scales: dict[str, float] = field(
+        default_factory=lambda: {
+            "is_finish": 1.0,
+            "arrival_bonus": 1.0,
+            "ang_vel_xy_penalty": -0.3,
+            "distance_to_target": 1.0,
+            "tracking_lin_vel_reward": 3.5,
+            "tracking_ang_vel_reward": 1.5,
+            "feet_air_time_reward": 3.0,
+            "torque_penalty": -0.00001,
+            "action_rate_penalty": -0.001,
+            "termination_penalty": -10.0,
+            "anti_stall": -0.8,
+            "pit_swing": 1.0,
         }
     )
 
@@ -171,8 +205,12 @@ class VBotStairsObstaclesEnvCfg(VBotStairsEnvCfg):
 class VBotSection01EnvCfg(VBotStairsEnvCfg):
     """VBot Section01单独训练配置 - 高台楼梯地形"""
     model_file: str = os.path.dirname(__file__) + "/xmls/scene_section01.xml"
-    max_episode_seconds: float = 40.0  # 拉长一倍：从20秒增加到40秒
-    max_episode_steps: int = 4000  # 拉长一倍：从2000步增加到4000步
+    max_episode_seconds: float = 40  # 拉长一倍：从20秒增加到40秒
+    max_episode_steps: int = 4000 # 拉长一倍：从2000步增加到4000步
+    stuck_timeout_seconds: float = 3.0
+    stuck_min_displacement: float = 0.15
+    stuck_command_threshold: float = 0.1
+    render_spacing = 0.0
     
     @dataclass
     class InitState:
@@ -207,6 +245,11 @@ class VBotSection01EnvCfg(VBotStairsEnvCfg):
         # 固定目标点: X=0, Y=10.2, Z=2 (Z通过XML控制)
         # 起始位置Y=-2.4, 目标Y=10.2, 距离=12.6米
         pose_command_range = [0.0, 10.2, 0.0, 0.0, 10.2, 0.0]
+        waypoint_lin_kp = 0.8
+        waypoint_ang_kp = 1.0
+        vel_limit = ((-0.35, -0.16, -0.45), (0.55, 0.16, 0.45))
+        rough_vel_limit = ((-0.25, -0.12, -0.35), (0.35, 0.12, 0.35))
+        waypoint_wait_seconds = 0.5
     
     @dataclass
     class ControlConfig:
@@ -215,98 +258,10 @@ class VBotSection01EnvCfg(VBotStairsEnvCfg):
     init_state: InitState = field(default_factory=InitState)
     commands: Commands = field(default_factory=Commands)
     control_config: ControlConfig = field(default_factory=ControlConfig)
+    reward_config: RewardConfigSection01 = field(default_factory=RewardConfigSection01)
 
 
-@registry.envcfg("vbot_navigation_section02")
-@dataclass
-class VBotSection02EnvCfg(VBotStairsEnvCfg):
-    """VBot Section02单独训练配置 - 中间楼梯地形"""
-    model_file: str = os.path.dirname(__file__) + "/xmls/scene_section02.xml"
-    max_episode_seconds: float = 60.0  # Section02较复杂，需要更多时间
-    max_episode_steps: int = 6000
-    
-    @dataclass
-    class InitState:
-        # 起始位置：section02的起始位置（继承自locomotion）
-        # pos = [-2.5, 8.5, 1.8]
-        # pos = [-2.5, 8.5, 1.8]
-        pos = [-2.5, 12.0, 1.8]  # Y坐标对应section02的起点，高度1.8m
-        # pos = [-2.5, 15.0, 3.3]  # Y坐标对应section02的起点，高度1.8m
-        # pos = [-2.5, 21.0, 3.3]  # Y坐标对应section02的起点，高度1.8m
-        # pos = [-2.5, 24.6, 1.8]  # Y坐标对应section02的起点，高度1.8m
-        # pos_randomization_range = [-0.5, -0.5, 0.5, 0.5]  # 小范围随机±0.5m
-        pos_randomization_range = [-0., -0., 0., 0.]  # 小范围随机±0.5m
-        
-        default_joint_angles = {
-            "FR_hip_joint": -0.0,
-            "FR_thigh_joint": 0.9,
-            "FR_calf_joint": -1.8,
-            "FL_hip_joint": 0.0,
-            "FL_thigh_joint": 0.9,
-            "FL_calf_joint": -1.8,
-            "RR_hip_joint": -0.0,
-            "RR_thigh_joint": 0.9,
-            "RR_calf_joint": -1.8,
-            "RL_hip_joint": 0.0,
-            "RL_thigh_joint": 0.9,
-            "RL_calf_joint": -1.8,
-        }
-    
-    @dataclass
-    class Commands:
-        # 目标范围：覆盖section02区域（10-20米）
-        pose_command_range = [-3.0, 16.0, 3.14, -3.0, 26.0, 3.14]
-    
-    @dataclass
-    class ControlConfig:
-        action_scale = 0.25
-    
-    init_state: InitState = field(default_factory=InitState)
-    commands: Commands = field(default_factory=Commands)
-    control_config: ControlConfig = field(default_factory=ControlConfig)
 
-
-@registry.envcfg("vbot_navigation_section03")
-@dataclass
-class VBotSection03EnvCfg(VBotStairsEnvCfg):
-    """VBot Section03单独训练配置 - 终点楼梯地形"""
-    model_file: str = os.path.dirname(__file__) + "/xmls/scene_section03.xml"
-    max_episode_seconds: float = 50.0  # 拉长一倍：从25秒增加到50秒
-    max_episode_steps: int = 5000  # 拉长一倍：从2500步增加到5000步
-    
-    @dataclass
-    class InitState:
-        # 起始位置：section03的起始位置（继承自locomotion）
-        pos = [0.0, 26.0, 1.8]  # Y坐标对应section03的起点，高度1.8m
-        pos_randomization_range = [-0.5, -0.5, 0.5, 0.5]  # 小范围随机±0.5m
-        
-        default_joint_angles = {
-            "FR_hip_joint": -0.0,
-            "FR_thigh_joint": 0.9,
-            "FR_calf_joint": -1.8,
-            "FL_hip_joint": 0.0,
-            "FL_thigh_joint": 0.9,
-            "FL_calf_joint": -1.8,
-            "RR_hip_joint": -0.0,
-            "RR_thigh_joint": 0.9,
-            "RR_calf_joint": -1.8,
-            "RL_hip_joint": 0.0,
-            "RL_thigh_joint": 0.9,
-            "RL_calf_joint": -1.8,
-        }
-    
-    @dataclass
-    class Commands:
-        # 目标范围：覆盖section03区域（20-32米）
-        pose_command_range = [-3.0, 20.0, -3.14, 3.0, 32.0, 3.14]
-    
-    @dataclass
-    class ControlConfig:
-        action_scale = 0.25
-    
-    init_state: InitState = field(default_factory=InitState)
-    commands: Commands = field(default_factory=Commands)
-    control_config: ControlConfig = field(default_factory=ControlConfig)
 
 
 @registry.envcfg("vbot_navigation_long_course")
@@ -314,7 +269,8 @@ class VBotSection03EnvCfg(VBotStairsEnvCfg):
 class VBotLongCourseEnvCfg(VBotStairsEnvCfg):
     """VBot三段地形完整导航配置（比赛任务）- 使用world.xml统一地图"""
     # 使用scene_world.xml作为完整的三段地形地图（集成了world.xml）
-    model_file: str = os.path.dirname(__file__) + "/xmls/scene_world.xml"
+    # model_file: str = os.path.dirname(__file__) + "/xmls/scene_world.xml"
+    model_file: str = os.path.dirname(__file__) + "/xmls/world2.xml"
     max_episode_seconds: float = 60.0  # 优化：减少到60秒，加快训练速度
     max_episode_steps: int = 6000  # 对应60秒 @ 100Hz
     

@@ -487,7 +487,7 @@ class VBotLongCourseEnv(NpEnv):
         cfg = self._cfg
         
         # 计算总奖励
-        reward = np.array([0])
+        reward = np.zeros((data.shape[0], 1))
         
         return reward
 
