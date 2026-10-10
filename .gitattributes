@@ -5,7 +5,5 @@
 *.obj filter=lfs diff=lfs merge=lfs -text
 *.pickle filter=lfs diff=lfs merge=lfs -text
 *.png filter=lfs diff=lfs merge=lfs -text
-*.mp4 filter=lfs diff=lfs merge=lfs -text
-*.jpg filter=lfs diff=lfs merge=lfs -text
 *.hfield filter=lfs diff=lfs merge=lfs -text
 *.ktx2 filter=lfs diff=lfs merge=lfs -text
