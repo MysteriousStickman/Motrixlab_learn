@@ -23,6 +23,7 @@ from motrix_envs.math import quaternion
 from motrix_envs.math.quaternion import Quaternion
 
 from .cfg import VBotSection01EnvCfg
+from .height_field_query import TerrainHeightQuery, make_height_scan_grid
 
 
 
@@ -33,32 +34,29 @@ class VBotSection01Env(NpEnv):
     继承自NpEnv，使用VBotSection001EnvCfg配置
     """
     _cfg: VBotSection01EnvCfg
-    ROUGH_Y_RANGE = (-1.65, 1.85)
-    PIT_Y_RANGE = (-1.5, 1.5)
-    TERRAIN_SCAN_OFFSETS = np.asarray([0.20, 0.40, 0.60, 0.80, 1.00, 1.20, 1.40, 1.60], dtype=np.float32)
-    
     
     def __init__(self, cfg: VBotSection01EnvCfg, num_envs: int = 1):
         # 调用父类NpEnv初始化
         super().__init__(cfg, num_envs=num_envs)
         self.section_idx = 1
         self.target_positions1 = np.array([[0.0, -0.6], [0.0, 1.4], [0.0, 3.4], [0.0, 5.4], [0.0, 8.0]], dtype=np.float32)
+        # self.target_positions1 = np.array([[0.0, -0.6], [0.0, 3.4]], dtype=np.float32)
+        self.target_positions2 = np.array([[0.0, 8.0], [0.0, 10.0], [0.0, 12.0], [0.0, 14.0], [0.0, 16.0], [0.0, 18.0], [0.0, 20.0], [0.0, 22.0], [0.0, 24.0]], dtype=np.float32)
+        self.target_positions_map = {
+            1: self.target_positions1,
+            2: self.target_positions2
+        }
+        print(f"当前训练使用阶段：{self.section_idx}地形 ！！！！！")
         # 初始化机器人body和接触
         self._body = self._model.get_body(cfg.asset.body_name)
         self.num_foot_check = 4 
         self._joint_noise_scale = 0.03
         self.position_threshold = 0.2
-        self._waypoint_lin_kp = float(getattr(cfg.commands, "waypoint_lin_kp", 0.8))
+        self._waypoint_lin_kp = float(getattr(cfg.commands, "waypoint_lin_kp", 1.0))
         self._waypoint_ang_kp = float(getattr(cfg.commands, "waypoint_ang_kp", 1.0))
-        self._vel_low = np.asarray(getattr(cfg.commands, "vel_limit", ((-0.35, -0.16, -0.45), (0.55, 0.16, 0.45)))[0], dtype=np.float32)
-        self._vel_high = np.asarray(getattr(cfg.commands, "vel_limit", ((-0.35, -0.16, -0.45), (0.55, 0.16, 0.45)))[1], dtype=np.float32)
-        self._rough_vel_low = np.asarray(getattr(cfg.commands, "rough_vel_limit", ((-0.16, -0.10, -0.85), (0.82, 0.20, 0.65)))[0], dtype=np.float32)
-        self._rough_vel_high = np.asarray(getattr(cfg.commands, "rough_vel_limit", ((-0.16, -0.10, -0.35), (0.82, 0.20, 0.65)))[1], dtype=np.float32)
         self._command_smooth_alpha = float(np.clip(cfg.ctrl_dt / (0.25 + cfg.ctrl_dt), 0.0, 1.0))
-        wait_seconds = max(float(getattr(cfg.commands, "waypoint_wait_seconds", 0.5)), 0.0)
-        self._waypoint_wait_steps = 0 if wait_seconds <= 0.0 else max(1, int(round(wait_seconds / max(cfg.ctrl_dt, 1e-6))))
-
         
+
         # 获取目标标记的body
         self._target_marker_body = self._model.get_body("target_marker")
         
@@ -72,8 +70,20 @@ class VBotSection01Env(NpEnv):
         
         # 动作和观测空间
         self._action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(12,), dtype=np.float32)
-        # 观测空间：67维（55 + 12维接触力）
-        self._observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(60,), dtype=np.float32)
+        
+        # 观测空间：60维（48 + 4 + 12维接触力）
+        self._height_offsets = make_height_scan_grid(
+            cfg.height_scan_x_range, cfg.height_scan_y_range, cfg.height_scan_resolution
+        )
+        if not np.isfinite(cfg.height_scan_clip) or cfg.height_scan_clip <= 0:
+            raise ValueError("height_scan_clip must be finite and positive.")
+        if not np.isfinite([cfg.height_scan_reference, cfg.height_scan_scale]).all():
+            raise ValueError("height scan reference and scale must be finite.")
+        self.terrain_query = TerrainHeightQuery(cfg.model_file)
+
+        self._observation_space = gym.spaces.Box(
+            low=-np.inf, high=np.inf, shape=(52 + len(self._height_offsets),), dtype=np.float32
+        )
         
         self._num_dof_pos = self._model.num_dof_pos  # 36
         self._num_dof_vel = self._model.num_dof_vel  # 33
@@ -99,6 +109,14 @@ class VBotSection01Env(NpEnv):
     
         # 导航统计计数器
         self.navigation_stats_step = 0
+
+        self.record_total_reward_dict = {
+            key: np.zeros(num_envs, dtype=np.float64)
+            for key in cfg.reward_config.scales
+        }
+        self._episode_reward_total = np.zeros(num_envs, dtype=np.float64)
+        self._completed_episodes = 0
+        self._successful_episodes = 0
     
 
     def _init_undesired_contact(self):
@@ -134,35 +152,45 @@ class VBotSection01Env(NpEnv):
         """初始化缓存和参数"""
         cfg = self._cfg
         self.gravity_vec = np.array([0.0, 0.0, -1.0], dtype=np.float32)
-        self.default_angles = np.zeros(self._num_action, dtype=np.float32)
         
         # 归一化系数
         self.commands_scale = np.array(
             [cfg.normalization.lin_vel, cfg.normalization.lin_vel, cfg.normalization.ang_vel],
             dtype=np.float32
-        )
-        
-        # 设置默认关节角度
-        for i in range(self._model.num_actuators):
-            for name, angle in cfg.init_state.default_joint_angles.items():
-                if name in self._model.actuator_names[i]:
-                    self.default_angles[i] = angle
-        
+        )    
         # self._init_dof_pos[-self._num_action:] = self.default_angles
         # self._init_dof_pos[10:22] = self.default_angles
         self.action_filter_alpha = 0.3
+
+        self.default_angles = np.zeros((self._num_action,), dtype=np.float32)
+        self.joint_lower_limits = np.full((self._num_action,), -1e6, dtype=np.float32)
+        self.joint_upper_limits = np.full((self._num_action,), 1e6, dtype=np.float32)
+        for idx, actuator_name in enumerate(self._model.actuator_names):
+            if actuator_name is None:
+                continue
+            for joint_name, default_angle in cfg.init_state.default_joint_angles.items():
+                if joint_name in actuator_name:
+                    self.default_angles[idx] = default_angle
+                    break
+            if "hip_joint" in actuator_name:
+                low, high = -0.73304, 0.73304
+            elif "thigh_joint" in actuator_name:
+                if actuator_name.startswith("FR_") or actuator_name.startswith("FL_"):
+                    low, high = -1.559, 3.1298
+                else:
+                    low, high = -0.51181, 4.177
+            elif "calf_joint" in actuator_name:
+                low, high = -2.6387, -0.7854
+            else:
+                low, high = -1e6, 1e6
+            self.joint_lower_limits[idx] = low
+            self.joint_upper_limits[idx] = high
+
+        limit_center = 0.5 * (self.joint_lower_limits + self.joint_upper_limits)
+        half_range = 0.5 * (self.joint_upper_limits - self.joint_lower_limits)
+        self.soft_joint_lower_limits = limit_center - 0.9 * half_range
+        self.soft_joint_upper_limits = limit_center + 0.9 * half_range
     
-    def _rough_zone_mask(self, base_xy: np.ndarray) -> np.ndarray:
-        return np.logical_and(base_xy[:, 1] >= self.ROUGH_Y_RANGE[0], base_xy[:, 1] <= self.ROUGH_Y_RANGE[1])
-    
-    def _command_limits(self, base_xy: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        low = np.tile(self._vel_low, (base_xy.shape[0], 1))
-        high = np.tile(self._vel_high, (base_xy.shape[0], 1))
-        rough = self._rough_zone_mask(base_xy)
-        if np.any(rough):
-            low[rough] = self._rough_vel_low
-            high[rough] = self._rough_vel_high
-        return low, high
     
     def _find_target_marker_dof_indices(self):
         """查找target_marker在dof_pos中的索引位置"""
@@ -251,25 +279,12 @@ class VBotSection01Env(NpEnv):
         return torques
     
     
-    def _get_heading_from_quat(self, quat: np.ndarray) -> np.ndarray:
-        """从四元数计算yaw角（朝向）"""
-        qx, qy, qz, qw = quat[:, 0], quat[:, 1], quat[:, 2], quat[:, 3]
-        siny_cosp = 2 * (qw * qz + qx * qy)
-        cosy_cosp = 1 - 2 * (qy * qy + qz * qz)
-        heading = np.arctan2(siny_cosp, cosy_cosp)
-        return heading
-    
     def _update_target_marker(self, data: mtx.SceneData, pose_commands: np.ndarray):
         """更新目标位置标记的位置和朝向"""
-        num_envs = data.shape[0]
         all_dof_pos = data.dof_pos.copy()
-        for env_idx in range(num_envs):
-            target_x = float(pose_commands[env_idx, 0])
-            target_y = float(pose_commands[env_idx, 1])
-            target_yaw = float(np.pi / 2)
-            all_dof_pos[env_idx, self._target_marker_dof_start:self._target_marker_dof_end] = [
-                target_x, target_y, target_yaw
-            ]
+        all_dof_pos[:, self._target_marker_dof_start] = pose_commands[:, 0]
+        all_dof_pos[:, self._target_marker_dof_start + 1] = pose_commands[:, 1]
+        all_dof_pos[:, self._target_marker_dof_start + 2] = 0.5 * np.pi
         # print(all_dof_pos[env_idx, self._target_marker_dof_start:self._target_marker_dof_end])
         data.set_dof_pos(all_dof_pos, self._model)
         self._model.forward_kinematic(data)
@@ -410,13 +425,12 @@ class VBotSection01Env(NpEnv):
             command_raw[:, 0] = self._waypoint_lin_kp * delta_body[:, 0]
             command_raw[:, 1] = self._waypoint_lin_kp * delta_body[:, 1]
             command_raw[:, 2] = self._waypoint_ang_kp * yaw_error
-            low, high = self._command_limits(base_xy)
-            command_raw = np.clip(command_raw, low, high).astype(np.float32)
+            
+            command_raw = np.clip(command_raw * 1.0, -1.0, 1.0)
             command_raw[~active] = 0.0
 
         commands_smoothed += self._command_smooth_alpha * (command_raw - commands_smoothed)
-        low, high = self._command_limits(base_xy)
-        commands_smoothed = np.clip(commands_smoothed, low, high).astype(np.float32)
+        commands_smoothed = np.clip(commands_smoothed * 1.0, -1.0, 1.0)
         commands_smoothed[is_finish] = 0.0
 
 
@@ -480,28 +494,58 @@ class VBotSection01Env(NpEnv):
         reward = sum(reward_dict_scaled.values())
         reward = np.clip(reward, -100.0, 10000.0)
         info["reward_dict_scaled"] = reward_dict_scaled
+
+        # 按实际权重累计每个环境的整局贡献，包含本步到达/失败奖励。
+        for k, v in reward_dict_scaled.items():
+            self.record_total_reward_dict[k] += v
+        self._episode_reward_total += reward
+        self._report_finished_rewards(info["is_finish"], "到达终点", info, include_current_step=True)
+        self._report_finished_rewards(failure & ~info["is_finish"], "失败", info, include_current_step=True, pprint=False)
+        self._update_success_metrics(info, done, info["is_finish"])
+
         state.obs = obs
         state.reward = reward
         state.terminated = done
         
         return state
+    
+    def _report_finished_rewards(self, mask, reason, info, include_current_step=False, pprint=True):
+        if not np.any(mask):
+            return
+        steps = info["steps"][mask] + int(include_current_step)
+        if pprint:
+            print(
+                f"[回合奖励] {reason}: {np.count_nonzero(mask)} 个环境, "
+                f"平均步数={steps.mean():.1f}, "
+                f"平均目标索引={info['target_idx'][mask].mean():.2f}, "
+                f"平均实际总奖励={self._episode_reward_total[mask].mean():.3f}"
+            )
+        for key, values in self.record_total_reward_dict.items():
+            if pprint:
+                print(f"  {key}: 平均整局贡献={values[mask].mean():.3f}")
+            values[mask] = 0.0
+        self._episode_reward_total[mask] = 0.0
 
-    def _get_terrain_scan(self, base_xy: np.ndarray) -> np.ndarray:
-        """Compact section01 terrain preview, analogous to IsaacLab height_scan.
 
-        The yellow rough section is a known route band in this scene. These
-        forward samples tell the policy when a raised/uneven entrance is coming
-        before the feet collide with it, which is the missing signal that tends
-        to produce tiny reactive steps.
-        """
-        sample_y = base_xy[:, 1:2] + self.TERRAIN_SCAN_OFFSETS.reshape(1, -1)
-        y_min, y_max = self.ROUGH_Y_RANGE
-        inside = np.logical_and(sample_y >= y_min, sample_y <= y_max)
-        entry_edge = np.clip(1.0 - np.abs(sample_y - y_min) / 0.6, 0.0, 1.0)
-        exit_edge = np.clip(1.0 - np.abs(sample_y - y_max) / 0.6, 0.0, 1.0)
-        edge_signal = 0.5 * np.maximum(entry_edge, exit_edge)
-        scan = np.where(inside, 1.0, edge_signal)
-        return scan.astype(np.float32)
+    def _update_success_metrics(self, info, finished, successful):
+        """累计回合成功率，并交给 PPO 写入 TensorBoard。"""
+        finished_count = int(np.count_nonzero(finished))
+        if finished_count:
+            self._completed_episodes += finished_count
+            self._successful_episodes += int(np.count_nonzero(successful & finished))
+        rate = self._successful_episodes / self._completed_episodes if self._completed_episodes else 0.0
+        info["metrics"] = {
+            "success_rate": np.full(self._num_envs, rate, dtype=np.float32),
+            "completed_episodes": np.full(self._num_envs, self._completed_episodes, dtype=np.float32),
+        }
+
+
+    def _update_truncate(self):
+        # 基类在 update_state 后才更新超时标记，此时完整回合奖励已经累计。
+        super()._update_truncate()
+        timed_out = self._state.truncated & ~self._state.terminated
+        self._report_finished_rewards(timed_out, "超时", self._state.info)
+        self._update_success_metrics(self._state.info, timed_out, np.zeros_like(timed_out))
 
 
     def _get_obs(self, data: mtx.SceneData, info: dict):
@@ -512,31 +556,42 @@ class VBotSection01Env(NpEnv):
         local_lin_vel = Quaternion.rotate_inverse(root_quat, base_lin_vel_world)
         gyro = self._model.get_sensor_value(self._cfg.sensor.base_gyro, data)
         local_gravity = Quaternion.rotate_inverse(root_quat, self.gravity_vec)
-        joint_pos = self.get_dof_pos(data)
+        dof_pos = self.get_dof_pos(data)
         joint_vel = self.get_dof_vel(data)
-        joint_pos_rel = joint_pos - self.default_angles
+        dof_pos_rel = dof_pos - self.default_angles
         
 
         # 足端触地状态
         foot_contact = self._get_foot_check(data)
 
-        terrain_scan = self._get_terrain_scan(pose[:, :2])
+        
         obs_base = np.hstack(
             [
-                local_lin_vel * self._cfg.normalization.lin_vel,
-                gyro * self._cfg.normalization.ang_vel,
-                local_gravity,
-                joint_pos_rel * self._cfg.normalization.dof_pos,
-                joint_vel * self._cfg.normalization.dof_vel,
-                info["current_actions"],
-                info["commands"] * self.commands_scale,
+                local_lin_vel * self._cfg.normalization.lin_vel,  # 3
+                gyro * self._cfg.normalization.ang_vel,  # 3
+                local_gravity,  # 3
+                dof_pos_rel * self._cfg.normalization.dof_pos,  # 12
+                joint_vel * self._cfg.normalization.dof_vel,  # 12
+                info["current_actions"],  # 12
+                info["commands"] * self.commands_scale,  # 3
             ]
         )
         assert obs_base.shape == (data.shape[0], 48)
-        terrain_scan = self._get_terrain_scan(pose[:, :2])
-        obs = np.concatenate([obs_base, foot_contact, terrain_scan], axis=1)
 
-        assert obs.shape == (data.shape[0], 60)
+        # 地形世界坐标系高度
+        heights = self.terrain_query.get_height_scan(
+            pose[:, :2], self._quat_to_yaw(root_quat), self._height_offsets
+        )
+        # 机身当前高度 - 机身周围扫描阵列的地形高度 - 参考离地高度 
+        clearance = pose[:, 2:3] - heights - self._cfg.height_scan_reference
+        clip = self._cfg.height_scan_clip
+        # No hit is maximum downward clearance, never silently flat ground.
+        terrain_scan = np.clip(
+            np.where(np.isfinite(heights), clearance, clip), -clip, clip
+        ) * self._cfg.height_scan_scale
+        obs = np.concatenate([obs_base, foot_contact, terrain_scan], axis=1)
+        assert obs.shape == (data.shape[0], self.observation_space.shape[0])
+
         return np.nan_to_num(obs, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
     
 
@@ -628,8 +683,6 @@ class VBotSection01Env(NpEnv):
 
         # 机身发生碰撞、倒地
         base_contact = self._get_base_contacts(data)
-
-        # 
         pose = self._body.get_pose(data)
         root_quat = pose[:, 3:7]
         proj_g = Quaternion.rotate_inverse(root_quat, self.gravity_vec)
@@ -638,13 +691,10 @@ class VBotSection01Env(NpEnv):
         tilt_angle = np.arctan2(gxy, np.abs(gz))
         side_flip = tilt_angle > np.deg2rad(50)  # 机器人过度倾斜
 
-        # undesired_contacts = self._get_undesired_contacts(data)
-
         terminated = (
             vel_extreme
             | base_contact
             | side_flip
-            # | (undesired_contacts > 0.5)
             ) 
         return terminated
 
@@ -669,9 +719,6 @@ class VBotSection01Env(NpEnv):
         
         return foot_contact
     
-    def _pit_zone_mask(self, y: np.ndarray) -> np.ndarray:
-        return np.logical_and(y >= self.PIT_Y_RANGE[0], y <= self.PIT_Y_RANGE[1])
-    
      
     def _compute_reward(self, data: mtx.SceneData, info: dict, termination) -> np.ndarray:
         """
@@ -689,9 +736,9 @@ class VBotSection01Env(NpEnv):
 
         # 获取基础状态
         root_pos, root_quat, root_vel = self._extract_root_state(data)
-        joint_pos = self.get_dof_pos(data)
+        dof_pos = self.get_dof_pos(data)
         joint_vel = self.get_dof_vel(data)
-        joint_pos_rel = joint_pos - self.default_angles
+        
 
 
         # 传感器数据
@@ -711,9 +758,12 @@ class VBotSection01Env(NpEnv):
         distance_to_target = np.linalg.norm(position_error, axis=1)
         if "min_distance" not in info:
             info["min_distance"] = distance_to_target.copy()
-        distance_improvement = info["min_distance"] - distance_to_target
+        distance_improvement = np.maximum(
+            info["min_distance"] - distance_to_target,
+            0.0,
+        )
         info["min_distance"] = np.minimum(info["min_distance"], distance_to_target)
-        approach_reward = np.clip(distance_improvement * 4.0, -1.0, 1.0)  # Reward 5 points for every 1 meter closer
+        approach_reward = np.clip(distance_improvement * 4.0, 0.0, 1.0)  # Reward 5 points for every 1 meter closer
 
 
         lin_vel_z_penalty = np.square(base_lin_vel[:, 2])
@@ -752,18 +802,26 @@ class VBotSection01Env(NpEnv):
         action_diff = info["current_actions"] - info["last_actions"]
         action_rate_penalty = np.sum(np.square(action_diff), axis=1)
 
-        # 步态奖励
-        feet_air_time_reward = np.sum(
-            (info["air_time_before_contact"] - 0.5) * info["first_contact"],
+
+        # 步态奖励：奖励充分腾空后的落地，并防止单腿长期悬空逃避落地结算。
+        landing_reward = np.sum(
+            np.clip((info["air_time_before_contact"] - 0.15) / 0.25, 0.0, 1.0)
+            * info["first_contact"],
             axis=1,
         )
+        long_air_penalty = np.sum(
+            np.clip((info["air_time_before_contact"] - 0.8), 0.0, 1.0),
+            axis=1,
+        )
+        contacts = info["foot_contact"]  # FR, FL, RR, RL
+        diagonal_support = (
+            (contacts[:, 0] == contacts[:, 3])
+            & (contacts[:, 1] == contacts[:, 2])
+            & (contacts[:, 0] != contacts[:, 1])
+        )
+        feet_air_time_reward = (landing_reward - long_air_penalty) * active_move   # + 0.1 * diagonal_support.astype(np.float32)
 
-        # 坑洼抬脚：坑洼段内鼓励 2~3 脚触地（=1~2 脚抬起跨越坑洼），
-        # 抑制全触地滑行(4)与全腾空跳跃(0)；仅在坑洼区且移动时生效。
-        n_contact = np.sum(info["foot_contact"].astype(np.int32), axis=1)
-        in_pit = self._pit_zone_mask(root_pos[:, 1]).astype(np.float32)
-        swing_ok = np.logical_and(n_contact >= 2, n_contact <= 3).astype(np.float32)
-
+        
         arrival_bonus = np.where(info["reached_waypoint"], 1.0, 0.0)
 
         # 到达最终奖励更大的
@@ -779,16 +837,20 @@ class VBotSection01Env(NpEnv):
             "distance_to_target": approach_reward,  # 接近目标奖励
             "tracking_lin_vel_reward": tracking_lin_vel,   # 线速度跟踪奖励
             "tracking_ang_vel_reward": tracking_ang_vel_reward,  # 角速度跟踪奖励
-            "tracking_goal_vel": tracking_goal_vel,
+            "tracking_goal_vel": tracking_goal_vel,  # 机器人是否以接近命令速度的大小，朝着目标点方向前进。
             "feet_air_time_reward": feet_air_time_reward,  # 步态奖励
 
             "torque_penalty": torque_penalty,    # 力矩惩罚
             "action_rate_penalty": action_rate_penalty,  # 动作剧烈变化惩罚
             "termination_penalty": termination_penalty,  # 终止惩罚
             "anti_stall": speed_deficit * active_move,  # 速度跟踪惩罚
-            "pit_swing": swing_ok * in_pit * active_move  # S1路段坑洼地段抬脚奖励
+            
+            "dof_pos_limits": np.sum(
+                np.clip(dof_pos - self.soft_joint_upper_limits, 0.0, None)
+                + np.clip(self.soft_joint_lower_limits - dof_pos, 0.0, None),
+                axis=1,
+            ),
         }
-        # 计算总奖励
         return reward_dict
     
 
@@ -819,8 +881,9 @@ class VBotSection01Env(NpEnv):
 
 
         # 按照waypoint给指令
-        target_positions1 = np.tile(self.target_positions1, (num_envs, 1, 1))
-        target_idx = np.zeros(num_envs, dtype=np.int32)  # (num_envs, )
+        target_position = self.target_positions_map[self.section_idx]
+        target_positions = np.tile(target_position, (num_envs, 1, 1))
+        target_idx = np.zeros(num_envs, dtype=np.int32)
         # pose_commands = 
         
 
@@ -840,7 +903,7 @@ class VBotSection01Env(NpEnv):
         self._model.forward_kinematic(data)
         
         # 更新目标位置标记
-        self._update_target_marker(data, target_positions1[np.arange(num_envs), target_idx])
+        self._update_target_marker(data, target_positions[np.arange(num_envs), target_idx])
         reset_root_xy = self._body.get_pose(data)[:, :2].copy()
         
         info = {
@@ -857,8 +920,8 @@ class VBotSection01Env(NpEnv):
                 (num_envs, self.num_foot_check),
                 dtype=np.float32,
             ),
-            "num_waypoints": self.target_positions1.shape[0],
-            "waypoints": target_positions1,
+            "num_waypoints": target_position.shape[0],
+            "waypoints": target_positions,
             "target_idx": target_idx,
             "is_finish": np.zeros(num_envs, dtype=np.bool_),
             "reached_waypoint": np.zeros(num_envs, dtype=np.bool_),

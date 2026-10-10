@@ -79,9 +79,24 @@
 # @dataclass
 # class Asset:
 #     body_name = "base"
-#     foot_names = ["FR", "FL", "RR", "RL"]
+#     foot_names = ["FR_foot_contact_{}", "FL_foot_contact_{}", "RR_foot_contact_{}", "RL_foot_contact_{}"]
 #     terminate_after_contacts_on = ["collision_middle_box", "collision_head_box"]
-#     ground_subtree = "C_"  # 地形根节点，用于subtree接触检测
+#     undesired_contacts_on: list[str] = field(
+#             default_factory=lambda: [
+#                 "collision_mainlink_box",
+#                 "collision_motor_cylinder",
+#                 "collision_revo_left_box",
+#                 "collision_revo_right_box",
+#                 "collision_upper_box",
+#                 "collision_lower_box",
+#                 "collision_backprotect_box",
+#                 "collision_low_bar_FL_box",
+#                 "collision_low_bar_FR_box",
+#                 "collision_low_bar_RL_box",
+#                 "collision_low_bar_RR_box",
+#             ]
+#         )
+#     ground_subtree = "base_contact_{}"  # 地形根节点，用于subtree接触检测
    
 # @dataclass
 # class Sensor:
@@ -110,6 +125,26 @@
             
 #             # ===== 终止惩罚 =====
 #             "termination": -200.0,          # 终止惩罚
+#         }
+#     )
+
+# @dataclass
+# class RewardConfigSection01:
+#     scales: dict[str, float] = field(
+#         default_factory=lambda: {
+#             "is_finish": 50.0,  # 20
+#             "arrival_bonus": 15.0,  # 8
+#             "ang_vel_xy_penalty": -0.5,
+#             "distance_to_target": 0.2,  # 1
+#             "tracking_lin_vel_reward": 3.0,  # 4
+#             "tracking_ang_vel_reward": 1.5,  # 2
+#             "tracking_goal_vel": 4.0,  # 5
+#             "feet_air_time_reward": 2.0,  # 3
+#             "torque_penalty": -0.00001,
+#             "action_rate_penalty": -0.001,
+#             "termination_penalty": -15.0,  # -10
+#             "anti_stall": -1.0,  # -0.8
+#             "dof_pos_limits": -0.5,
 #         }
 #     )
 
@@ -166,12 +201,170 @@
 #     max_episode_seconds: float = 20.0
 #     max_episode_steps: int = 2000
 
+
+# @registry.envcfg("vbot_navigation_section01")
+# @dataclass
+# class VBotSection01EnvCfg(VBotStairsEnvCfg):
+#     """VBot Section01单独训练配置 - 高台楼梯地形"""
+#     # 米；以机器人当前位置为原点，+X 向前，+Y 向左，随 yaw 实时旋转。
+#     # 含两端：5 x 3 = 15 个地形高度，总观测 48 + 4 + 15 = 67 维。
+#     height_scan_x_range: tuple = (-0.4, 0.8)
+#     height_scan_y_range: tuple = (-0.4, 0.8)
+#     height_scan_resolution: float = 0.4
+#     # 观测 = clip(机身世界 Z - 地面世界 Z - 参考离地高度) * scale。
+#     height_scan_reference: float = 0.5
+#     height_scan_clip: float = 1.0
+#     height_scan_scale: float = 1.0
+
+#     model_file: str = os.path.dirname(__file__) + "/xmls/scene_section01.xml"
+#     max_episode_seconds: float = 40  # 拉长一倍：从20秒增加到40秒
+#     max_episode_steps: int = 4000 # 拉长一倍：从2000步增加到4000步
+#     stuck_timeout_seconds: float = 4.0
+#     stuck_min_displacement: float = 0.15
+#     stuck_command_threshold: float = 0.1
+#     render_spacing = 0.0
+    
+#     @dataclass
+#     class InitState:
+#         # 起始位置：随机化范围内生成
+#         pos = [0.0, -2.4, 0.5]  # 中心位置
+        
+#         pos_randomization_range = [-0.5, -0.5, 0.5, 0.5]  # X±0.5m, Y±0.5m随机
+        
+#         default_joint_angles = {
+#             "FR_hip_joint": -0.0,
+#             "FR_thigh_joint": 0.9,
+#             "FR_calf_joint": -1.8,
+#             "FL_hip_joint": 0.0,
+#             "FL_thigh_joint": 0.9,
+#             "FL_calf_joint": -1.8,
+#             "RR_hip_joint": -0.0,
+#             "RR_thigh_joint": 0.9,
+#             "RR_calf_joint": -1.8,
+#             "RL_hip_joint": 0.0,
+#             "RL_thigh_joint": 0.9,
+#             "RL_calf_joint": -1.8,
+#         }
+    
+#     @dataclass
+#     class Commands:
+#         # 目标位置：缩短距离，固定目标点
+#         # 起始位置Y=-2.4, 目标Y=3.6, 距离=6米（与vbot_np相近）
+#         # pose_command_range = [0.0, 3.6, 0.0, 0.0, 3.6, 0.0]
+        
+#         # 原始配置（已注释）：
+#         # 目标位置：固定在终止角范围远端（完全无随机化）
+#         # 固定目标点: X=0, Y=10.2, Z=2 (Z通过XML控制)
+#         # 起始位置Y=-2.4, 目标Y=10.2, 距离=12.6米
+#         pose_command_range = [0.0, 10.2, 0.0, 0.0, 10.2, 0.0]
+#         waypoint_lin_kp = 1.0
+#         waypoint_ang_kp = 1.0
+#         vel_limit = ((-1.0, -1.0, -1.0), (1.0, 1.0, 1.0))  # ((-0.35, -0.16, -0.45), (0.55, 0.16, 0.45))
+#         rough_vel_limit = ((-0.25, -0.12, -0.35), (0.35, 0.12, 0.35))
+#         waypoint_wait_seconds = 0.5
+    
+#     @dataclass
+#     class ControlConfig:
+#         action_scale = 0.25
+    
+#     init_state: InitState = field(default_factory=InitState)
+#     commands: Commands = field(default_factory=Commands)
+#     control_config: ControlConfig = field(default_factory=ControlConfig)
+#     reward_config: RewardConfigSection01 = field(default_factory=RewardConfigSection01)
+
+
+
+
+# @registry.envcfg("vbot_navigation_section02")
+# @dataclass
+# class VBotSection02EnvCfg(VBotSection01EnvCfg):
+#     """VBot Section01单独训练配置 - 高台楼梯地形"""
+#     model_file: str = os.path.dirname(__file__) + "/xmls/scene_section01.xml"
+#     max_episode_seconds: float = 40  # 拉长一倍：从20秒增加到40秒
+#     max_episode_steps: int = 4000 # 拉长一倍：从2000步增加到4000步
+#     stuck_timeout_seconds: float = 4.0
+#     stuck_min_displacement: float = 0.15
+#     stuck_command_threshold: float = 0.1
+#     render_spacing = 0.0
+    
+#     @dataclass
+#     class InitState:
+#         # 起始位置：随机化范围内生成
+#         pos = [0.0, 8.0,2.0]  # 中心位置
+        
+#         pos_randomization_range = [-0.5, -0.5, 0.5, 0.5]  # X±0.5m, Y±0.5m随机
+        
+#         default_joint_angles = {
+#             "FR_hip_joint": -0.0,
+#             "FR_thigh_joint": 0.9,
+#             "FR_calf_joint": -1.8,
+#             "FL_hip_joint": 0.0,
+#             "FL_thigh_joint": 0.9,
+#             "FL_calf_joint": -1.8,
+#             "RR_hip_joint": -0.0,
+#             "RR_thigh_joint": 0.9,
+#             "RR_calf_joint": -1.8,
+#             "RL_hip_joint": 0.0,
+#             "RL_thigh_joint": 0.9,
+#             "RL_calf_joint": -1.8,
+#         }
+    
+
+#     @dataclass
+#     class RewardConfigSection02:
+#         scales: dict[str, float] = field(
+#             default_factory=lambda: {
+#                 "is_finish": 60.0,
+#                 "arrival_bonus": 20.0,
+#                 "ang_vel_xy_penalty": 0.0, # -0.0005,
+#                 "distance_to_target": 1.0,
+#                 "tracking_lin_vel_reward": 1.5,
+#                 "tracking_ang_vel_reward": 0.5,
+#                 "tracking_goal_vel": 2.0,
+#                 "feet_air_time_reward": 10.0,
+#                 "orientation_penalty": -2.0,
+#                 "lin_vel_z_penalty": -1.0,
+#                 "torque_penalty": -0.0001,
+#                 "action_rate_penalty": -0.1,
+#                 "termination_penalty": -10.0,
+#                 "anti_stall": -2.0,
+#                 "pit_swing": 1.0,
+#                 "dof_pos_limits": -1.5,
+#             }
+#         )
+
+#     @dataclass
+#     class Commands:
+#         # 目标位置：缩短距离，固定目标点
+#         # 起始位置Y=-2.4, 目标Y=3.6, 距离=6米（与vbot_np相近）
+#         # pose_command_range = [0.0, 3.6, 0.0, 0.0, 3.6, 0.0]
+        
+#         # 原始配置（已注释）：
+#         # 目标位置：固定在终止角范围远端（完全无随机化）
+#         # 固定目标点: X=0, Y=10.2, Z=2 (Z通过XML控制)
+#         # 起始位置Y=-2.4, 目标Y=10.2, 距离=12.6米
+#         pose_command_range = [0.0, 10.2, 0.0, 0.0, 10.2, 0.0]
+#         waypoint_lin_kp = 1.6  # 0.8
+#         waypoint_ang_kp = 2.0  # 1.0
+#         vel_limit = ((-0.35, -0.16, -0.45), (0.55, 0.16, 0.45))
+#         rough_vel_limit = ((-0.25, -0.12, -0.35), (0.35, 0.12, 0.35))
+#         waypoint_wait_seconds = 0.5
+    
+#     @dataclass
+#     class ControlConfig:
+#         action_scale = 0.25
+    
+#     init_state: InitState = field(default_factory=InitState)
+#     commands: Commands = field(default_factory=Commands)
+#     reward_config: RewardConfigSection02 = field(default_factory=RewardConfigSection02)
+
 # @registry.envcfg("vbot_navigation_long_course")
 # @dataclass
 # class VBotLongCourseEnvCfg(VBotStairsEnvCfg):
 #     """VBot三段地形完整导航配置（比赛任务）- 使用world.xml统一地图"""
 #     # 使用scene_world.xml作为完整的三段地形地图（集成了world.xml）
-#     model_file: str = os.path.dirname(__file__) + "/xmls/scene_world.xml"
+#     # model_file: str = os.path.dirname(__file__) + "/xmls/scene_world.xml"
+#     model_file: str = os.path.dirname(__file__) + "/xmls/world2.xml"
 #     max_episode_seconds: float = 60.0  # 优化：减少到60秒，加快训练速度
 #     max_episode_steps: int = 6000  # 对应60秒 @ 100Hz
     
@@ -209,63 +402,20 @@
 #     commands: Commands = field(default_factory=Commands)
 #     control_config: ControlConfig = field(default_factory=ControlConfig)
 
-
-
-# # ============================================================================
-# # Section011 越障导航：三阶段训练 pipeline 配置
-# #   s1：速度指令跟踪（密集奖励）+ 简化语义地形 + 关一切课程·起跑线全宽出生 + 6 穿越门稠密奖励 → 从零训练
-# #   s2：速度指令跟踪 + 真实地形高度感知 + EMA 地形难度课程 → warmstart 自 s1
-# #   s3：端到端（去人工速度指令：目标相对位置观测 + position-progress 奖励）+ 由近及远距离课程 → warmstart 自 s2
-# # 三阶段观测维度恒为 68、网络同构 → 逐级 --checkpoint warmstart 兼容。
-# # 正式注册名 vbot_navigation_section011 / _eval 即 s3 逻辑。
-# # ============================================================================
+# @registry.envcfg("vbot_navigation_section001")
+# #通过 @registry.envcfg("vbot_navigation_section001") 注册
 # @dataclass
-# class VBotSection011EnvCfg(VBotStairsEnvCfg):
-#     """Section011 越障导航基础配置（默认开关组合 = s1：指令跟踪 + 简化语义地形 + 关一切课程）。"""
-#     model_file: str = os.path.dirname(__file__) + "/xmls/scene_section011.xml"
-#     max_episode_seconds: float = 40.0
-#     max_episode_steps: int = 4000
-#     eval_mode: bool = False
-#     reach_threshold: float = 0.45
-#     # 出生范围：集中在起跑平地中心 (x≈0, y≈-2.4)、统一朝 +y，保证每个 episode 任务一致。
-#     spawn_x_range: tuple = (-0.5, 0.5)
-#     spawn_y_range: tuple = (-2.9, -2.0)
-
-#     # —— 阶段开关（s1/s2/s3 子类按阶段组合）——
-#     use_e2e_goal_obs: bool = False        # True=端到端：观测用目标相对位置替代速度指令（s3）
-#     use_real_terrain_scan: bool = False   # True=真实地形高度采样 TerrainSampler（s2/s3）
-#     use_terrain_curriculum: bool = False  # True=EMA 地形难度课程：难段入口前出生混合（s2）
-#     use_dist_curriculum: bool = False     # True=由近及远距离课程（仅 warmstart 后的 s3 启用）
-
-#     # —— 端到端观测缩放（与速度指令量级相近，warmstart 友好）——
-#     goal_pos_obs_clip: float = 3.0
-#     goal_pos_obs_scale: float = 0.5
-#     goal_yaw_obs_scale: float = 0.5
-#     # 端到端模式 anti_stall 的参考前进速度（未到终点却低于此速度受罚）
-#     e2e_ref_speed: float = 0.4
-
-#     # —— 地形难度课程参数（s2）——
-#     curriculum_p_hard_init: float = 0.15      # 初始难段出生比例
-#     curriculum_p_hard_max: float = 0.5        # 难段出生比例上限
-#     curriculum_success_target: float = 0.6    # EMA 成功率目标（达标→提高难段比例）
-#     curriculum_ema_alpha: float = 0.02        # 成功率 EMA 平滑系数
-#     # 反滑行：单脚连续触地超此秒数开始惩罚（防止策略收敛到贴地滑行局部最优）
-#     stance_overstay_sec: float = 0.4
-
-#     # —— 由近及远距离课程参数（s3）——
-#     # 出生 y 初始落在平台上 [6.8, 7.3]（距终点中心 7.8 大于到达阈值 0.45，不会出生即判到达），
-#     # EMA 达标后下界逐步后退：平台 → 坡顶 → 上坡 → 坑洼 → 平地 → 起跑线 -2.9。
-#     dist_spawn_y_hi: float = 7.3
-#     dist_spawn_y_lo_init: float = 6.8
-#     dist_spawn_y_far: float = -2.9
-#     dist_curriculum_step: float = 0.4         # 每档后退增量
-#     # 推进一档后 EMA×此系数，强制在新出生点重新达标才再推下一档；
-#     # 取值过大会让课程推进超过策略学习速度、导致整体退化，宁慢勿崩。
-#     dist_curriculum_ema_decay: float = 0.6
-
+# class VBotSection001EnvCfg(VBotStairsEnvCfg):
+#     """VBot Section01单独训练配置 - 高台楼梯地形"""
+#     model_file: str = os.path.dirname(__file__) + "/xmls/scene_section001.xml"
+#     max_episode_seconds: float = 40.0  # 拉长一倍：从20秒增加到40秒
+#     max_episode_steps: int = 4000  # 拉长一倍：从2000步增加到4000步
 #     @dataclass
 #     class InitState:
-#         pos = [0.0, -3.0, 0.5]
+#         # 起始位置：随机化范围内生成
+#         pos = [0.0, -2.4, 0.5]  # 中心位置
+#         pos_randomization_range = [-0.5, -0.5, 0.5, 0.5]  # X±0.5m, Y±0.5m随机
+
 #         default_joint_angles = {
 #             "FR_hip_joint": -0.0,
 #             "FR_thigh_joint": 0.9,
@@ -280,97 +430,19 @@
 #             "RL_thigh_joint": 0.9,
 #             "RL_calf_joint": -1.8,
 #         }
-
 #     @dataclass
 #     class Commands:
-#         waypoint_lin_kp: float = 0.8
-#         waypoint_ang_kp: float = 1.0
-
+#         # 目标位置：缩短距离，固定目标点
+#         # 起始位置Y=-2.4, 目标Y=3.6, 距离=6米（与vbot_np相近）
+#         # pose_command_range = [0.0, 3.6, 0.0, 0.0, 3.6, 0.0]
+#         # 原始配置（已注释）：
+#         # 目标位置：固定在终止角范围远端（完全无随机化）
+#         # 固定目标点: X=0, Y=10.2, Z=2 (Z通过XML控制)
+#         # 起始位置Y=-2.4, 目标Y=10.2, 距离=12.6米
+#         pose_command_range = [0.0, 10.2, 0.0, 0.0, 10.2, 0.0]
 #     @dataclass
 #     class ControlConfig:
-#         action_scale: float = 0.45
-#         stiffness: float = 80.0
-#         damping: float = 6.0
-
-#     @dataclass
-#     class NavRewardConfig:
-#         tracking_sigma: float = 0.2
-#         feet_air_time_target: float = 0.45
-#         scales: dict = field(default_factory=dict)
-
+#         action_scale = 0.25
 #     init_state: InitState = field(default_factory=InitState)
 #     commands: Commands = field(default_factory=Commands)
 #     control_config: ControlConfig = field(default_factory=ControlConfig)
-#     reward_config: NavRewardConfig = field(default_factory=NavRewardConfig)
-
-
-# @registry.envcfg("vbot_navigation_section011_s1")
-# @dataclass
-# class VBotSection011S1EnvCfg(VBotSection011EnvCfg):
-#     """[阶段1 · 从零训练] 速度指令跟踪（密集奖励，上层按航路点生成 commands）+ 简化语义地形
-#     + 关一切课程·起跑线全宽均匀出生 (x∈[-0.5,0.5], y∈[-2.9,-2.0]) + 6 固定穿越门稠密奖励
-#     （每过一门 +8）从起跑线一路牵引到平台。
-
-#     刻意不用任何「刷近出生」课程：从零阶段若让出生点靠近终点，训练成功率会虚高
-#     （平整段滑行即可「到达」），而 eval 从起跑线出发的真实成功率为 0、坑洼区得不到训练；
-#     训练与评估保持同口径（都从起跑线走全程）才能保证指标真实。"""
-#     use_e2e_goal_obs: bool = False        # 速度指令跟踪（密集奖励，从零可训）
-#     use_real_terrain_scan: bool = False   # 简化语义地形，先专注「会走 + 全程导航」
-#     use_dist_curriculum: bool = False
-#     use_terrain_curriculum: bool = False
-
-
-# @registry.envcfg("vbot_navigation_section011_s1_eval")
-# @dataclass
-# class VBotSection011S1EvalEnvCfg(VBotSection011S1EnvCfg):
-#     """阶段1 评估/回放：固定起跑线全程出生、关一切课程，口径与真实任务一致（简化语义地形）。"""
-#     eval_mode: bool = True
-#     render_spacing: float = 0.0
-
-
-# @registry.envcfg("vbot_navigation_section011_s2")
-# @dataclass
-# class VBotSection011S2EnvCfg(VBotSection011EnvCfg):
-#     """[阶段2 · 真实地形感知，warmstart 自 s1] 仍为速度指令跟踪，但 terrain_scan 换成从仿真几何
-#     实采的真实高度差（米），策略须自行解读地形。叠加 EMA 地形难度课程：起跑线全宽出生
-#     + 按 p_hard 概率混入难段【入口前】出生（仍需穿越难段才算成功，不刷近终点）。"""
-#     use_e2e_goal_obs: bool = False        # 仍速度指令跟踪
-#     use_real_terrain_scan: bool = True    # 引入真实地形高度感知（本阶段新难度）
-#     use_dist_curriculum: bool = False
-#     use_terrain_curriculum: bool = True   # EMA 地形难度课程
-
-
-# @registry.envcfg("vbot_navigation_section011_s2_eval")
-# @dataclass
-# class VBotSection011S2EvalEnvCfg(VBotSection011S2EnvCfg):
-#     """阶段2 评估/回放：固定起跑线全程出生、关一切课程（真实地形感知）。"""
-#     eval_mode: bool = True
-#     use_terrain_curriculum: bool = False
-#     render_spacing: float = 0.0
-
-
-# @registry.envcfg("vbot_navigation_section011")
-# @registry.envcfg("vbot_navigation_section011_s3")
-# @dataclass
-# class VBotSection011S3EnvCfg(VBotSection011EnvCfg):
-#     """[阶段3 · 端到端，warmstart 自 s2，正式交付形态] 去掉人工速度指令：观测改目标相对位置
-#     goal_delta_body + 朝向误差 yaw_error，奖励改 position-progress 驱动，由策略自主决定速度。
-#     配「由近及远」距离课程：warmstart 后策略已会走，课程帮稀疏的无指令导航拿到第一次成功，
-#     并随 EMA 达标把出生点逐步拉回起跑线；评估始终用固定起跑线全程口径。"""
-#     use_e2e_goal_obs: bool = True
-#     use_real_terrain_scan: bool = True
-#     use_dist_curriculum: bool = True
-#     use_terrain_curriculum: bool = False
-#     # 距离课程的 EMA 达标阈值取 0.7（比地形课程更谨慎，达标才拉远出生下界）
-#     curriculum_success_target: float = 0.7
-
-
-# @registry.envcfg("vbot_navigation_section011_eval")
-# @registry.envcfg("vbot_navigation_section011_s3_eval")
-# @dataclass
-# class VBotSection011S3EvalEnvCfg(VBotSection011S3EnvCfg):
-#     """阶段3 评估/回放：固定起跑线全程出生、关一切课程，口径同真实任务（无速度指令自主导航）。"""
-#     eval_mode: bool = True
-#     use_dist_curriculum: bool = False
-#     render_spacing: float = 0.0
-

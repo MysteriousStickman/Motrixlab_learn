@@ -216,7 +216,27 @@ class locomotion:
         share_policy_value_features: bool = False
         max_env_steps: int = 1024 * 60_000
         num_envs: int = 2048
-        play_num_envs: int = 4
+        play_num_envs: int = 1
+        check_point_interval: int = 1000
+
+        # Override PPO configuration
+        rollouts: int = 24
+        policy_hidden_layer_sizes: tuple[int, ...] = (256, 128, 64)
+        value_hidden_layer_sizes: tuple[int, ...] = (256, 128, 64)
+        learning_epochs: int = 5
+        mini_batches: int = 3
+        learning_rate: float = 3e-4
+    @rlcfg("vbot_navigation_section02")
+    @dataclass
+    class VBotSection01(PPOCfg):
+        """
+        Go1 Walk RL config
+        """
+        seed: int = 42
+        share_policy_value_features: bool = False
+        max_env_steps: int = 1024 * 60_000
+        num_envs: int = 2048
+        play_num_envs: int = 1
         check_point_interval: int = 1000
 
         # Override PPO configuration
@@ -241,7 +261,7 @@ class locomotion:
         check_point_interval: int = 1000
 
         # Override PPO configuration
-        rollouts: int = 24
+        rollouts: int = 24  # 每交互24次更新agent
         policy_hidden_layer_sizes: tuple[int, ...] = (256, 128, 64)
         value_hidden_layer_sizes: tuple[int, ...] = (256, 128, 64)
         learning_epochs: int = 5

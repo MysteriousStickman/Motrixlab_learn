@@ -34,6 +34,7 @@ _RENDER = flags.DEFINE_bool("render", False, "Render the env")
 _TRAIN_BACKEND = flags.DEFINE_string("train-backend", "jax", "The learning backend. (jax/torch)")
 _SEED = flags.DEFINE_integer("seed", None, "Random seed for reproducibility")
 _RAND_SEED = flags.DEFINE_bool("rand-seed", False, "Generate random seed")
+_POLICY = flags.DEFINE_string("policy", None, "The policy to load")
 
 
 def get_train_backend(supports: utils.DeviceSupports):
@@ -64,6 +65,11 @@ def main(argv):
         rl_override["seed"] = None
     elif _SEED.present:
         rl_override["seed"] = _SEED.value
+    
+    if _POLICY.present:
+        policy_path = _POLICY.value
+    else:
+        policy_path = None
 
     sim_backend = _SIM_BACKEND.value
     train_backend = "jax"
@@ -87,7 +93,7 @@ def main(argv):
     else:
         raise Exception(f"Unknown train backend: {train_backend}")
 
-    trainer.train()
+    trainer.train(policy_path)
 
 
 if __name__ == "__main__":

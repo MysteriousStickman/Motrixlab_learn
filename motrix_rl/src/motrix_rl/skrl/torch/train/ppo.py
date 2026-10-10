@@ -14,7 +14,7 @@
 # ==============================================================================
 
 from typing import Any
-
+import os
 import torch
 import torch.nn as nn
 from skrl.agents.torch.ppo import PPO as BasePPO
@@ -172,7 +172,7 @@ class Trainer:
         self._sim_backend = sim_backend
         self._enable_render = enable_render
 
-    def train(self) -> None:
+    def train(self, policy: str = None) -> None:
         """
         Start training the agent.
         """
@@ -183,6 +183,10 @@ class Trainer:
         models = self._make_model(skrl_env, rlcfg)
         ppo_cfg = _get_cfg(rlcfg, skrl_env, log_dir=get_log_dir(self._env_name))
         agent = self._make_agent(models, skrl_env, ppo_cfg)
+        if policy is not None and os.path.exists(policy):
+            print(f"remuse policy: {policy}")
+            agent.load(policy)
+
         cfg_trainer = {
             "timesteps": rlcfg.max_batch_env_steps,
             "headless": not self._enable_render,

@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "A general-purpose machine learning architecture designed for robot training"
 authors = [{ name = "Motphys", email = "developers@motphys.com" }]
 requires-python = "==3.10.*"
+dependencies = [
+    "mujoco==3.0.0",
+]
 
 [project.optional-dependencies]
 docs = [
