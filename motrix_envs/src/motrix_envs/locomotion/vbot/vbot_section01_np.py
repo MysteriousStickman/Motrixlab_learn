@@ -40,6 +40,7 @@ class VBotSection01Env(NpEnv):
         super().__init__(cfg, num_envs=num_envs)
         self.section_idx = 1
         self.target_positions1 = np.array([[0.0, -0.6], [0.0, 1.4], [0.0, 3.4], [0.0, 5.4], [0.0, 8.0]], dtype=np.float32)
+        # self.target_positions2 = np.array([[0.0, -0.6], [0.0, 1.4], [0.0, 3.4], [0.0, 5.4], [0.0, 8.0], [0.0, 8.0], [0.0, 10.0], [0.0, 12.0], [0.0, 14.0], [0.0, 16.0], [0.0, 18.0], [0.0, 20.0], [0.0, 22.0], [0.0, 24.0]], dtype=np.float32)
         # self.target_positions1 = np.array([[0.0, -0.6], [0.0, 3.4]], dtype=np.float32)
         self.target_positions2 = np.array([[0.0, 8.0], [0.0, 10.0], [0.0, 12.0], [0.0, 14.0], [0.0, 16.0], [0.0, 18.0], [0.0, 20.0], [0.0, 22.0], [0.0, 24.0]], dtype=np.float32)
         self.target_positions_map = {
@@ -805,7 +806,7 @@ class VBotSection01Env(NpEnv):
 
         # 步态奖励：奖励充分腾空后的落地，并防止单腿长期悬空逃避落地结算。
         landing_reward = np.sum(
-            np.clip((info["air_time_before_contact"] - 0.15) / 0.25, 0.0, 1.0)
+            np.clip((info["air_time_before_contact"] - 0.15) / 0.15, 0.0, 1.0)
             * info["first_contact"],
             axis=1,
         )
@@ -837,19 +838,19 @@ class VBotSection01Env(NpEnv):
             "distance_to_target": approach_reward,  # 接近目标奖励
             "tracking_lin_vel_reward": tracking_lin_vel,   # 线速度跟踪奖励
             "tracking_ang_vel_reward": tracking_ang_vel_reward,  # 角速度跟踪奖励
-            "tracking_goal_vel": tracking_goal_vel,  # 机器人是否以接近命令速度的大小，朝着目标点方向前进。
+            # "tracking_goal_vel": tracking_goal_vel,  # 机器人是否以接近命令速度的大小，朝着目标点方向前进。
             "feet_air_time_reward": feet_air_time_reward,  # 步态奖励
 
             "torque_penalty": torque_penalty,    # 力矩惩罚
-            "action_rate_penalty": action_rate_penalty,  # 动作剧烈变化惩罚
+            # "action_rate_penalty": action_rate_penalty,  # 动作剧烈变化惩罚
             "termination_penalty": termination_penalty,  # 终止惩罚
-            "anti_stall": speed_deficit * active_move,  # 速度跟踪惩罚
+            # "anti_stall": speed_deficit * active_move,  # 速度跟踪惩罚
             
-            "dof_pos_limits": np.sum(
-                np.clip(dof_pos - self.soft_joint_upper_limits, 0.0, None)
-                + np.clip(self.soft_joint_lower_limits - dof_pos, 0.0, None),
-                axis=1,
-            ),
+            # "dof_pos_limits": np.sum(
+            #     np.clip(dof_pos - self.soft_joint_upper_limits, 0.0, None)
+            #     + np.clip(self.soft_joint_lower_limits - dof_pos, 0.0, None),
+            #     axis=1,
+            # ),
         }
         return reward_dict
     

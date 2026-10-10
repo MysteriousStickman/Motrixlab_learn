@@ -138,13 +138,13 @@ class RewardConfigSection01:
             "distance_to_target": 0.2,  # 1
             "tracking_lin_vel_reward": 2.0,  # 3.5
             "tracking_ang_vel_reward": 1.0,  # 1.5
-            "tracking_goal_vel": 4.0,  # 5
-            "feet_air_time_reward": 2.5,  # 2.0
+            # "tracking_goal_vel": 4.0,  # 5
+            "feet_air_time_reward": 2.0,  # 2.0
             "torque_penalty": -0.00001,
-            "action_rate_penalty": -0.0001,  # -0.001
+            # "action_rate_penalty": -0.0001,  # -0.001
             "termination_penalty": -15.0,  # -10
-            "anti_stall": -1.0,  # -0.8
-            "dof_pos_limits": -0.5,
+            # "anti_stall": -1.0,  # -0.8
+            # "dof_pos_limits": -0.5,
         }
     )
 
